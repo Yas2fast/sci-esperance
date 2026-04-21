@@ -27,8 +27,8 @@ function loadState() {
     const parsed = JSON.parse(raw);
     return {
       settings: { ...defaultData.settings, ...(parsed.settings || {}) },
-      clients: parsed.clients || [],
-      documents: parsed.documents || [],
+      clients: Array.isArray(parsed.clients) ? parsed.clients : [],
+      documents: Array.isArray(parsed.documents) ? parsed.documents : [],
     };
   } catch {
     return structuredClone(defaultData);
@@ -45,7 +45,10 @@ function uid(prefix = 'id') {
 
 function formatMoney(value) {
   const amount = Number(value || 0);
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: state.settings.currency || 'EUR' }).format(amount);
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: state.settings.currency || 'EUR',
+  }).format(amount);
 }
 
 function formatDate(dateStr) {
@@ -54,27 +57,53 @@ function formatDate(dateStr) {
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date);
 }
 
-function byId(id) { return document.getElementById(id); }
+function byId(id) {
+  return document.getElementById(id);
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"]|'/g, m => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[m]));
+}
 
 function setView(view) {
   const titles = {
     dashboard: ['Tableau de bord', 'Vue rapide de votre activité'],
     clients: ['Clients', 'Base de données clients'],
     documents: ['Documents', 'Factures, quittances et suivi'],
+    relances: ['Relances', 'Première relance, deuxième relance et mise en demeure'],
     settings: ['Paramètres', 'Informations de la société'],
   };
-  document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
+
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-  byId(`${view}View`).classList.add('active');
+
+  const target = byId(`${view}View`);
+  if (target) target.classList.add('active');
+
   byId('pageTitle').textContent = titles[view][0];
   byId('pageSubtitle').textContent = titles[view][1];
 }
 
 function renderStats() {
-  const paidTotal = state.documents.filter(d => d.status === 'paid').reduce((a, b) => a + Number(b.amount || 0), 0);
-  const unpaidTotal = state.documents.filter(d => d.status === 'unpaid').reduce((a, b) => a + Number(b.amount || 0), 0);
+  const paidTotal = state.documents
+    .filter(d => d.status === 'paid' && (d.type === 'facture' || d.type === 'quittance'))
+    .reduce((a, b) => a + Number(b.amount || 0), 0);
+
+  const unpaidTotal = state.documents
+    .filter(d => d.status === 'unpaid' && (d.type === 'facture' || d.type === 'quittance'))
+    .reduce((a, b) => a + Number(b.amount || 0), 0);
+
   byId('statClients').textContent = state.clients.length;
-  byId('statDocuments').textContent = state.documents.length;
+  byId('statDocuments').textContent = state.documents.filter(d => d.type === 'facture' || d.type === 'quittance').length;
   byId('statPaid').textContent = formatMoney(paidTotal);
   byId('statUnpaid').textContent = formatMoney(unpaidTotal);
 }
@@ -82,6 +111,7 @@ function renderStats() {
 function renderRecentDocuments() {
   const wrap = byId('recentDocuments');
   const docs = [...state.documents]
+    .filter(d => d.type === 'facture' || d.type === 'quittance')
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 6);
 
@@ -95,13 +125,14 @@ function renderRecentDocuments() {
     return `
       <div class="list-item">
         <div>
-          <strong>${doc.number} — ${doc.period}</strong>
-          <small>${doc.type === 'facture' ? 'Facture' : 'Quittance'} · ${client?.name || 'Client supprimé'} · ${formatDate(doc.date)}</small>
+          <strong>${escapeHtml(doc.number)} — ${escapeHtml(doc.period)}</strong>
+          <small>${doc.type === 'facture' ? 'Facture' : 'Quittance'} · ${escapeHtml(client?.name || 'Client supprimé')} · ${formatDate(doc.date)}</small>
         </div>
         <div>
           <div class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</div>
         </div>
-      </div>`;
+      </div>
+    `;
   }).join('');
 }
 
@@ -149,13 +180,16 @@ function renderClients() {
           </tr>
         `).join('')}
       </tbody>
-    </table>`;
+    </table>
+  `;
 }
 
 function renderDocuments() {
   const query = byId('documentSearch').value.trim().toLowerCase();
   const filter = byId('documentFilter').value;
+
   const docs = [...state.documents]
+    .filter(doc => doc.type === 'facture' || doc.type === 'quittance')
     .filter(doc => {
       const client = state.clients.find(c => c.id === doc.clientId);
       const txt = `${doc.number} ${doc.period} ${client?.name || ''} ${doc.notes || ''}`.toLowerCase();
@@ -189,26 +223,96 @@ function renderDocuments() {
         ${docs.map(doc => {
           const client = state.clients.find(c => c.id === doc.clientId);
           return `
-          <tr>
-            <td><span class="tag ${doc.type}">${doc.type === 'facture' ? 'Facture' : 'Quittance'}</span></td>
-            <td><strong>${escapeHtml(doc.number)}</strong></td>
-            <td>${escapeHtml(client?.name || 'Client supprimé')}</td>
-            <td>${escapeHtml(doc.period)}</td>
-            <td>${formatDate(doc.date)}</td>
-            <td>${formatMoney(doc.amount)}</td>
-            <td><span class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</span></td>
-            <td>
-              <div class="action-row">
-                <button class="link-btn" onclick="previewDocument('${doc.id}')">Voir</button>
-                <button class="link-btn" onclick="toggleStatus('${doc.id}')">${doc.status === 'paid' ? 'Mettre impayé' : 'Mettre payé'}</button>
-                <button class="link-btn" onclick="editDocument('${doc.id}')">Modifier</button>
-                <button class="danger-link" onclick="deleteDocument('${doc.id}')">Supprimer</button>
-              </div>
-            </td>
-          </tr>`;
+            <tr>
+              <td><span class="tag ${doc.type}">${doc.type === 'facture' ? 'Facture' : 'Quittance'}</span></td>
+              <td><strong>${escapeHtml(doc.number)}</strong></td>
+              <td>${escapeHtml(client?.name || 'Client supprimé')}</td>
+              <td>${escapeHtml(doc.period)}</td>
+              <td>${formatDate(doc.date)}</td>
+              <td>${formatMoney(doc.amount)}</td>
+              <td><span class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</span></td>
+              <td>
+                <div class="action-row">
+                  <button class="link-btn" onclick="previewDocument('${doc.id}')">Voir</button>
+                  <button class="link-btn" onclick="toggleStatus('${doc.id}')">${doc.status === 'paid' ? 'Mettre impayé' : 'Mettre payé'}</button>
+                  <button class="link-btn" onclick="editDocument('${doc.id}')">Modifier</button>
+                  <button class="danger-link" onclick="deleteDocument('${doc.id}')">Supprimer</button>
+                </div>
+              </td>
+            </tr>
+          `;
         }).join('')}
       </tbody>
-    </table>`;
+    </table>
+  `;
+}
+
+function renderReminders() {
+  const wrap = byId('remindersTableWrap');
+  if (!wrap) return;
+
+  const query = (byId('reminderSearch')?.value || '').trim().toLowerCase();
+  const filter = byId('reminderFilter')?.value || 'all';
+
+  const docs = [...state.documents]
+    .filter(doc => doc.type === 'facture' && doc.status === 'unpaid')
+    .filter(doc => {
+      const client = state.clients.find(c => c.id === doc.clientId);
+      const reminderLevel = getReminderLevel(doc);
+      const txt = `${doc.number} ${doc.period} ${client?.name || ''}`.toLowerCase();
+      const matchQuery = txt.includes(query);
+      const matchFilter =
+        filter === 'all' ||
+        (filter === 'first' && reminderLevel === 1) ||
+        (filter === 'second' && reminderLevel === 2) ||
+        (filter === 'formal' && reminderLevel >= 3);
+      return matchQuery && matchFilter;
+    })
+    .sort((a, b) => new Date(a.dueDate || a.date) - new Date(b.dueDate || b.date));
+
+  if (!docs.length) {
+    wrap.innerHTML = '<div class="empty">Aucune relance à afficher.</div>';
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Niveau</th>
+          <th>Document</th>
+          <th>Client</th>
+          <th>Échéance</th>
+          <th>Retard</th>
+          <th>Montant</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${docs.map(doc => {
+          const client = state.clients.find(c => c.id === doc.clientId);
+          const level = getReminderLevel(doc);
+          const overdueDays = getOverdueDays(doc);
+          const levelLabel = level === 1 ? '1ère relance' : level === 2 ? '2ème relance' : 'Mise en demeure';
+          const tagClass = level === 1 ? 'relance' : level === 2 ? 'relance' : 'mise-en-demeure';
+
+          return `
+            <tr class="reminder-level-${level}">
+              <td><span class="tag ${tagClass}">${levelLabel}</span></td>
+              <td><strong>${escapeHtml(doc.number)}</strong><br><small>${escapeHtml(doc.period)}</small></td>
+              <td>${escapeHtml(client?.name || 'Client supprimé')}</td>
+              <td>${formatDate(doc.dueDate || doc.date)}</td>
+              <td>${overdueDays > 0 ? `${overdueDays} jour(s)` : '—'}</td>
+              <td>${formatMoney(doc.amount)}</td>
+              <td>
+                <button class="link-btn" onclick="previewReminder('${doc.id}', ${level})">Voir</button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 function renderSettings() {
@@ -223,6 +327,7 @@ function refreshAll() {
   renderRecentDocuments();
   renderClients();
   renderDocuments();
+  renderReminders();
   renderSettings();
   populateClientOptions();
   saveState();
@@ -232,11 +337,14 @@ function openClientModal(client = null) {
   const dialog = byId('clientDialog');
   const form = byId('clientForm');
   form.reset();
+
   byId('clientModalTitle').textContent = client ? 'Modifier le client' : 'Nouveau client';
   form.elements.id.value = client?.id || '';
-  ['name','email','phone','property','rentAmount','dueDay','address','notes'].forEach(field => {
+
+  ['name', 'email', 'phone', 'property', 'rentAmount', 'dueDay', 'address', 'notes'].forEach(field => {
     form.elements[field].value = client?.[field] || '';
   });
+
   dialog.showModal();
 }
 
@@ -245,13 +353,14 @@ function populateClientOptions(selectedId = '') {
   select.innerHTML = state.clients.length
     ? state.clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.property ? ' — ' + escapeHtml(c.property) : ''}</option>`).join('')
     : '<option value="">Aucun client</option>';
+
   if (selectedId) select.value = selectedId;
 }
 
 function nextDocumentNumber(type) {
   const year = new Date().getFullYear();
   const prefix = type === 'facture' ? 'FAC' : 'QUI';
-  const count = state.documents.filter(d => d.type === type && d.number.startsWith(`${prefix}-${year}`)).length + 1;
+  const count = state.documents.filter(d => d.type === type && String(d.number || '').startsWith(`${prefix}-${year}`)).length + 1;
   return `${prefix}-${year}-${String(count).padStart(3, '0')}`;
 }
 
@@ -259,15 +368,22 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   const dialog = byId('documentDialog');
   const form = byId('documentForm');
   form.reset();
+
   const type = doc?.type || presetType;
-  byId('documentModalTitle').textContent = doc ? 'Modifier le document' : `Nouvelle ${type === 'facture' ? 'facture' : 'quittance'}`;
+  byId('documentModalTitle').textContent = doc
+    ? 'Modifier le document'
+    : `Nouvelle ${type === 'facture' ? 'facture' : 'quittance'}`;
+
   form.elements.id.value = doc?.id || '';
   form.elements.type.value = type;
   populateClientOptions(doc?.clientId || presetClientId);
   form.elements.number.value = doc?.number || nextDocumentNumber(type);
   form.elements.date.value = doc?.date || new Date().toISOString().slice(0, 10);
+  form.elements.dueDate.value = doc?.dueDate || doc?.date || new Date().toISOString().slice(0, 10);
   form.elements.period.value = doc?.period || '';
   form.elements.amount.value = doc?.amount || '';
+  form.elements.charges.value = doc?.charges || 0;
+  form.elements.vatRate.value = doc?.vatRate ?? 0;
   form.elements.status.value = doc?.status || (type === 'quittance' ? 'paid' : 'unpaid');
   form.elements.notes.value = doc?.notes || '';
 
@@ -280,78 +396,171 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   dialog.showModal();
 }
 
-function escapeHtml(str) {
-  return String(str ?? '').replace(/[&<>"]|'/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+function getOverdueDays(doc) {
+  if (doc.status !== 'unpaid') return 0;
+  const refDate = doc.dueDate || doc.date;
+  if (!refDate) return 0;
+  const due = new Date(refDate + 'T00:00:00');
+  const today = new Date();
+  due.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today - due) / (1000 * 60 * 60 * 24));
+  return diff > 0 ? diff : 0;
+}
+
+function getReminderLevel(doc) {
+  const overdueDays = getOverdueDays(doc);
+  if (overdueDays >= 30) return 3;
+  if (overdueDays >= 15) return 2;
+  if (overdueDays >= 1) return 1;
+  return 1;
+}
+
+function getReminderLabel(level) {
+  if (level === 1) return 'Première relance';
+  if (level === 2) return 'Deuxième relance';
+  return 'Mise en demeure';
 }
 
 function createDocumentHtml(doc) {
   const client = state.clients.find(c => c.id === doc.clientId) || {};
   const s = state.settings;
-  const typeTitle = doc.type === 'facture' ? 'Facture' : 'Quittance de loyer';
-  const intro = doc.type === 'facture'
-    ? 'Veuillez trouver ci-dessous le détail de la facture.'
-    : 'Le présent document atteste du paiement du loyer mentionné ci-dessous.';
+  const isInvoice = doc.type === 'facture';
+  const typeTitle = isInvoice ? 'FACTURE' : 'QUITTANCE DE LOYER';
+
+  const totalAmount = Number(doc.amount || 0);
+  const charges = Number(doc.charges || 0);
+  const vatRate = Number(doc.vatRate || 0);
+  const rentOnly = Math.max(0, totalAmount - charges);
+  const vatAmount = totalAmount * (vatRate / 100);
+  const totalTtc = totalAmount + vatAmount;
 
   return `
-    <div class="doc-sheet">
-      <div class="doc-top">
-        <div>
-          <div class="doc-title">${typeTitle}</div>
-          <div class="doc-muted">${escapeHtml(doc.number)}</div>
-          <div class="doc-muted">Date : ${formatDate(doc.date)}</div>
+    <div class="doc-sheet apple-doc">
+      <div class="apple-doc-header">
+        <div class="apple-doc-company">
+          <h2>SCI DE L'ESPERANCE</h2>
+          <p>35 RUE DES CAILLOUX<br>92110 CLICHY</p>
+          ${s.siret ? `<p>SIRET : ${escapeHtml(s.siret)}</p>` : ''}
         </div>
-        <div>
-          <strong>${escapeHtml(s.companyName || '')}</strong><br>
-          ${escapeHtml(s.address || '')}<br>
-          ${escapeHtml([s.postalCode, s.city].filter(Boolean).join(' '))}<br>
-          ${s.email ? `Email : ${escapeHtml(s.email)}<br>` : ''}
-          ${s.phone ? `Tél : ${escapeHtml(s.phone)}<br>` : ''}
-          ${s.siret ? `SIRET : ${escapeHtml(s.siret)}` : ''}
+        <div class="apple-doc-meta">
+          <h1>${typeTitle}</h1>
+          <p><strong>N° :</strong> ${escapeHtml(doc.number)}</p>
+          <p><strong>Date :</strong> ${formatDate(doc.date)}</p>
+          <p><strong>Échéance :</strong> ${formatDate(doc.dueDate || doc.date)}</p>
         </div>
       </div>
 
-      <div class="doc-boxes">
-        <div class="doc-box">
-          <strong>Locataire / client</strong><br><br>
-          ${escapeHtml(client.name || '')}<br>
-          ${escapeHtml(client.address || '')}<br>
-          ${client.email ? `Email : ${escapeHtml(client.email)}<br>` : ''}
-          ${client.phone ? `Tél : ${escapeHtml(client.phone)}` : ''}
-        </div>
-        <div class="doc-box">
-          <strong>Informations</strong><br><br>
-          Bien : ${escapeHtml(client.property || '—')}<br>
-          Période / objet : ${escapeHtml(doc.period)}<br>
-          Statut : ${doc.status === 'paid' ? 'Payé' : 'Impayé'}<br>
-          ${s.iban ? `IBAN : ${escapeHtml(s.iban)}` : ''}
-        </div>
+      <div class="apple-doc-client">
+        <p><strong>Client :</strong></p>
+        <p>${escapeHtml(client.name || '')}</p>
+        <p>${escapeHtml(client.address || '')}</p>
       </div>
 
-      <p>${intro}</p>
-
-      <table class="doc-table">
+      <table class="apple-doc-table">
         <thead>
           <tr>
             <th>Désignation</th>
-            <th>Montant</th>
+            <th>Montant (€)</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>${escapeHtml(doc.period)}</td>
-            <td>${formatMoney(doc.amount)}</td>
+            <td>${escapeHtml(doc.period || 'Loyer')}</td>
+            <td>${formatMoney(rentOnly)}</td>
           </tr>
+          ${
+            charges > 0
+              ? `
+              <tr>
+                <td>Charges</td>
+                <td>${formatMoney(charges)}</td>
+              </tr>
+            `
+              : ''
+          }
         </tbody>
       </table>
 
-      <div class="doc-total">
-        <div class="doc-total-box">
-          <strong>Total : ${formatMoney(doc.amount)}</strong>
+      <div class="apple-doc-total">
+        <p>Total HT : ${formatMoney(totalAmount)}</p>
+        <p>TVA (${vatRate.toFixed(2).replace('.', ',')}%) : ${formatMoney(vatAmount)}</p>
+        <h2>Total TTC : ${formatMoney(totalTtc)}</h2>
+      </div>
+
+      <div class="apple-doc-conditions">
+        <p><strong>Conditions de paiement :</strong></p>
+        <p>Mode de paiement : Chèque ou virement</p>
+        <p>Conditions d’escompte : Aucun escompte en cas de paiement anticipé.</p>
+        <p>Indemnité forfaitaire pour retard de paiement (Décret n° 2012-1115 du 2 octobre 2012) : 40 €</p>
+      </div>
+
+      ${
+        doc.notes
+          ? `<div class="apple-doc-conditions"><p><strong>Notes :</strong> ${escapeHtml(doc.notes)}</p></div>`
+          : ''
+      }
+
+      <div class="apple-doc-footer">
+        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
+        35 RUE DES CAILLOUX 92110 CLICHY
+      </div>
+    </div>
+  `;
+}
+
+function createReminderHtml(doc, level) {
+  const client = state.clients.find(c => c.id === doc.clientId) || {};
+  const s = state.settings;
+  const overdueDays = getOverdueDays(doc);
+  const title = getReminderLabel(level);
+
+  return `
+    <div class="doc-sheet apple-doc">
+      <div class="apple-doc-header">
+        <div class="apple-doc-company">
+          <h2>SCI DE L'ESPERANCE</h2>
+          <p>35 RUE DES CAILLOUX<br>92110 CLICHY</p>
+        </div>
+        <div class="apple-doc-meta">
+          <h1>${title.toUpperCase()}</h1>
+          <p><strong>Date :</strong> ${formatDate(new Date().toISOString().slice(0, 10))}</p>
         </div>
       </div>
 
-      ${doc.notes ? `<p><strong>Notes :</strong> ${escapeHtml(doc.notes)}</p>` : ''}
-      ${s.legalNote ? `<div class="doc-footer">${escapeHtml(s.legalNote)}</div>` : ''}
+      <div class="apple-doc-client">
+        <p><strong>Destinataire :</strong></p>
+        <p>${escapeHtml(client.name || '')}</p>
+        <p>${escapeHtml(client.address || '')}</p>
+      </div>
+
+      <div class="apple-doc-conditions">
+        <p>Objet : ${escapeHtml(title)} concernant la facture ${escapeHtml(doc.number)}</p>
+        <p>Madame, Monsieur,</p>
+        <p>
+          Sauf erreur de notre part, la facture <strong>${escapeHtml(doc.number)}</strong> relative à
+          <strong>${escapeHtml(doc.period)}</strong>, d’un montant de <strong>${formatMoney(doc.amount)}</strong>,
+          arrivée à échéance le <strong>${formatDate(doc.dueDate || doc.date)}</strong>, demeure impayée à ce jour.
+        </p>
+        <p>
+          Le retard constaté est de <strong>${overdueDays} jour(s)</strong>.
+        </p>
+        ${
+          level === 1
+            ? `<p>Nous vous remercions de bien vouloir procéder au règlement dans les meilleurs délais.</p>`
+            : level === 2
+            ? `<p>Nous vous demandons de régulariser votre situation sous 8 jours à compter de la réception de la présente.</p>`
+            : `<p>Nous vous mettons en demeure de régler la somme due sous 8 jours, à défaut de quoi toute procédure utile pourra être engagée.</p>`
+        }
+        <p>Mode de paiement : Chèque ou virement.</p>
+        <p>Indemnité forfaitaire applicable en cas de retard de paiement : 40 €.</p>
+        <p>Veuillez agréer, Madame, Monsieur, l’expression de nos salutations distinguées.</p>
+      </div>
+
+      <div class="apple-doc-footer">
+        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
+        35 RUE DES CAILLOUX 92110 CLICHY
+      </div>
     </div>
   `;
 }
@@ -359,64 +568,111 @@ function createDocumentHtml(doc) {
 window.editClient = function(id) {
   const client = state.clients.find(c => c.id === id);
   if (client) openClientModal(client);
-}
+};
 
 window.deleteClient = function(id) {
   if (!confirm('Supprimer ce client ?')) return;
   state.clients = state.clients.filter(c => c.id !== id);
   state.documents = state.documents.filter(d => d.clientId !== id);
   refreshAll();
-}
+};
 
 window.createDocForClient = function(clientId, type) {
   if (!state.clients.length) return alert('Ajoutez d’abord un client.');
   openDocumentModal(null, type, clientId);
-}
+};
 
 window.editDocument = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (doc) openDocumentModal(doc, doc.type, doc.clientId);
-}
+};
 
 window.deleteDocument = function(id) {
   if (!confirm('Supprimer ce document ?')) return;
   state.documents = state.documents.filter(d => d.id !== id);
   refreshAll();
-}
+};
 
 window.toggleStatus = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (!doc) return;
   doc.status = doc.status === 'paid' ? 'unpaid' : 'paid';
   refreshAll();
-}
+};
 
 window.previewDocument = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (!doc) return;
   byId('printArea').innerHTML = createDocumentHtml(doc);
   byId('printDialog').showModal();
-}
+};
+
+window.previewReminder = function(id, level) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+  byId('printArea').innerHTML = createReminderHtml(doc, level);
+  byId('printDialog').showModal();
+};
 
 function bindEvents() {
-  document.querySelectorAll('.nav-btn').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => setView(btn.dataset.view));
+  });
 
   byId('quickAddClient').addEventListener('click', () => openClientModal());
   byId('addClientBtn').addEventListener('click', () => openClientModal());
-  byId('newInvoiceShortcut').addEventListener('click', () => state.clients.length ? openDocumentModal(null, 'facture') : alert('Ajoutez d’abord un client.'));
-  byId('newReceiptShortcut').addEventListener('click', () => state.clients.length ? openDocumentModal(null, 'quittance') : alert('Ajoutez d’abord un client.'));
+
+  byId('newInvoiceShortcut').addEventListener('click', () =>
+    state.clients.length ? openDocumentModal(null, 'facture') : alert('Ajoutez d’abord un client.')
+  );
+
+  byId('newReceiptShortcut').addEventListener('click', () =>
+    state.clients.length ? openDocumentModal(null, 'quittance') : alert('Ajoutez d’abord un client.')
+  );
+
   byId('goClientsShortcut').addEventListener('click', () => setView('clients'));
-  byId('addInvoiceBtn').addEventListener('click', () => state.clients.length ? openDocumentModal(null, 'facture') : alert('Ajoutez d’abord un client.'));
-  byId('addReceiptBtn').addEventListener('click', () => state.clients.length ? openDocumentModal(null, 'quittance') : alert('Ajoutez d’abord un client.'));
+
+  byId('addInvoiceBtn').addEventListener('click', () =>
+    state.clients.length ? openDocumentModal(null, 'facture') : alert('Ajoutez d’abord un client.')
+  );
+
+  byId('addReceiptBtn').addEventListener('click', () =>
+    state.clients.length ? openDocumentModal(null, 'quittance') : alert('Ajoutez d’abord un client.')
+  );
+
+  byId('firstReminderBtn')?.addEventListener('click', () => {
+    const docs = state.documents.filter(d => d.type === 'facture' && d.status === 'unpaid');
+    if (!docs.length) return alert('Aucune facture impayée.');
+    const doc = docs.sort((a, b) => new Date(a.dueDate || a.date) - new Date(b.dueDate || b.date))[0];
+    previewReminder(doc.id, 1);
+  });
+
+  byId('secondReminderBtn')?.addEventListener('click', () => {
+    const docs = state.documents.filter(d => d.type === 'facture' && d.status === 'unpaid' && getOverdueDays(d) >= 15);
+    if (!docs.length) return alert('Aucune facture éligible à une 2ème relance.');
+    const doc = docs.sort((a, b) => new Date(a.dueDate || a.date) - new Date(b.dueDate || b.date))[0];
+    previewReminder(doc.id, 2);
+  });
+
+  byId('formalNoticeBtn')?.addEventListener('click', () => {
+    const docs = state.documents.filter(d => d.type === 'facture' && d.status === 'unpaid' && getOverdueDays(d) >= 30);
+    if (!docs.length) return alert('Aucune facture éligible à une mise en demeure.');
+    const doc = docs.sort((a, b) => new Date(a.dueDate || a.date) - new Date(b.dueDate || b.date))[0];
+    previewReminder(doc.id, 3);
+  });
 
   byId('clientSearch').addEventListener('input', renderClients);
   byId('documentSearch').addEventListener('input', renderDocuments);
   byId('documentFilter').addEventListener('change', renderDocuments);
 
+  byId('reminderSearch')?.addEventListener('input', renderReminders);
+  byId('reminderFilter')?.addEventListener('change', renderReminders);
+
   byId('clientForm').addEventListener('submit', e => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const item = Object.fromEntries(fd.entries());
+
     const payload = {
       id: item.id || uid('client'),
       name: item.name.trim(),
@@ -428,9 +684,11 @@ function bindEvents() {
       address: item.address.trim(),
       notes: item.notes.trim(),
     };
+
     const index = state.clients.findIndex(c => c.id === payload.id);
     if (index >= 0) state.clients[index] = payload;
     else state.clients.push(payload);
+
     byId('clientDialog').close();
     refreshAll();
   });
@@ -439,21 +697,28 @@ function bindEvents() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const item = Object.fromEntries(fd.entries());
+
     if (!item.clientId) return alert('Sélectionnez un client.');
+
     const payload = {
       id: item.id || uid('doc'),
       type: item.type,
       clientId: item.clientId,
       number: item.number.trim(),
       date: item.date,
+      dueDate: item.dueDate || item.date,
       period: item.period.trim(),
       amount: Number(item.amount || 0),
+      charges: Number(item.charges || 0),
+      vatRate: Number(item.vatRate || 0),
       status: item.status,
       notes: item.notes.trim(),
     };
+
     const index = state.documents.findIndex(d => d.id === payload.id);
     if (index >= 0) state.documents[index] = payload;
     else state.documents.push(payload);
+
     byId('documentDialog').close();
     refreshAll();
   });
@@ -488,6 +753,7 @@ function exportData() {
 function importData(e) {
   const file = e.target.files[0];
   if (!file) return;
+
   const reader = new FileReader();
   reader.onload = () => {
     try {

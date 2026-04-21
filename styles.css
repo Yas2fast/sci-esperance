@@ -505,6 +505,9 @@ th {
   color: #000;
   padding: 8px 0 30px;
   font-family: Arial, sans-serif;
+  min-height: 1120px;
+  display: flex;
+  flex-direction: column;
 }
 
 .apple-doc-header {
@@ -603,7 +606,8 @@ th {
 }
 
 .apple-doc-footer {
-  margin-top: 50px;
+  margin-top: auto;
+  padding-top: 30px;
   text-align: center;
   font-size: 12px;
 }

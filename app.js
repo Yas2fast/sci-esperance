@@ -511,7 +511,6 @@ function createDocumentHtml(doc) {
 
 function createReminderHtml(doc, level) {
   const client = state.clients.find(c => c.id === doc.clientId) || {};
-  const s = state.settings;
   const overdueDays = getOverdueDays(doc);
   const title = getReminderLabel(level);
 
@@ -563,6 +562,87 @@ function createReminderHtml(doc, level) {
       </div>
     </div>
   `;
+}
+
+async function downloadCurrentPdf() {
+  const printArea = byId('printArea');
+  if (!printArea || !printArea.innerHTML.trim()) {
+    alert('Aucun document à télécharger.');
+    return;
+  }
+
+  if (!window.html2canvas || !window.jspdf || !window.jspdf.jsPDF) {
+    alert('Le module PDF n’est pas chargé. Vérifiez le HTML.');
+    return;
+  }
+
+  const downloadBtn = byId('downloadPdfBtn');
+  const originalText = downloadBtn ? downloadBtn.textContent : '';
+
+  try {
+    if (downloadBtn) {
+      downloadBtn.disabled = true;
+      downloadBtn.textContent = 'Téléchargement...';
+    }
+
+    const { jsPDF } = window.jspdf;
+
+    const canvas = await html2canvas(printArea, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      scrollX: 0,
+      scrollY: 0,
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    const margin = 10;
+    const usableWidth = pageWidth - margin * 2;
+    const usableHeight = pageHeight - margin * 2;
+
+    const imgWidth = usableWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = margin;
+
+    pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+    heightLeft -= usableHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight + margin;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+      heightLeft -= usableHeight;
+    }
+
+    const titleEl = printArea.querySelector('.apple-doc-meta h1');
+    const numberParagraph = Array.from(printArea.querySelectorAll('.apple-doc-meta p'))
+      .find(p => p.textContent.includes('N°'));
+
+    const rawTitle = titleEl ? titleEl.textContent.trim() : 'document';
+    const rawNumber = numberParagraph
+      ? numberParagraph.textContent.replace('N° :', '').replace('N°:', '').trim()
+      : new Date().getTime().toString();
+
+    const safeTitle = rawTitle.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿñæœ-]+/gi, '-');
+    const safeNumber = rawNumber.replace(/[^a-zA-Z0-9_-]+/g, '-');
+
+    pdf.save(`${safeTitle}-${safeNumber}.pdf`);
+  } catch (error) {
+    console.error(error);
+    alert('Erreur lors de la génération du PDF.');
+  } finally {
+    if (downloadBtn) {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = originalText || 'Télécharger PDF';
+    }
+  }
 }
 
 window.editClient = function(id) {
@@ -735,7 +815,8 @@ function bindEvents() {
     btn.addEventListener('click', () => byId(btn.dataset.close).close());
   });
 
-  byId('printNowBtn').addEventListener('click', () => window.print());
+  byId('printNowBtn')?.addEventListener('click', () => window.print());
+  byId('downloadPdfBtn')?.addEventListener('click', downloadCurrentPdf);
   byId('exportBtn').addEventListener('click', exportData);
   byId('importInput').addEventListener('change', importData);
 }

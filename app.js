@@ -501,6 +501,10 @@ function createDocumentHtml(doc) {
           : ''
       }
 
+      <div class="apple-doc-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp" alt="Tampon et signature">
+      </div>
+
       <div class="apple-doc-footer">
         SCI DE L'ESPERANCE – au capital de 10.000 €<br>
         35 RUE DES CAILLOUX 92110 CLICHY
@@ -554,6 +558,10 @@ function createReminderHtml(doc, level) {
         <p>Mode de paiement : Chèque ou virement.</p>
         <p>Indemnité forfaitaire applicable en cas de retard de paiement : 40 €.</p>
         <p>Veuillez agréer, Madame, Monsieur, l’expression de nos salutations distinguées.</p>
+      </div>
+
+      <div class="apple-doc-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp" alt="Tampon et signature">
       </div>
 
       <div class="apple-doc-footer">

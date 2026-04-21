@@ -11,12 +11,13 @@
     <aside class="sidebar">
       <div>
         <div class="brand">SCI de l’Espérance</div>
-        <div class="brand-sub">Gestion clients, factures & quittances</div>
+        <div class="brand-sub">Gestion clients, factures, quittances & relances</div>
       </div>
       <nav class="nav">
         <button class="nav-btn active" data-view="dashboard">Tableau de bord</button>
         <button class="nav-btn" data-view="clients">Clients</button>
         <button class="nav-btn" data-view="documents">Documents</button>
+        <button class="nav-btn" data-view="relances">Relances</button>
         <button class="nav-btn" data-view="settings">Paramètres</button>
       </nav>
       <div class="sidebar-footer">
@@ -111,6 +112,29 @@
             </select>
           </div>
           <div id="documentsTableWrap" class="table-wrap"></div>
+        </div>
+      </section>
+
+      <section id="relancesView" class="view">
+        <div class="panel">
+          <div class="panel-head panel-head-space">
+            <h2>Relances</h2>
+            <div class="action-row">
+              <button id="firstReminderBtn" class="secondary-btn">1ère relance</button>
+              <button id="secondReminderBtn" class="secondary-btn">2ème relance</button>
+              <button id="formalNoticeBtn" class="primary-btn">Mise en demeure</button>
+            </div>
+          </div>
+          <div class="toolbar toolbar-double">
+            <input id="reminderSearch" type="search" placeholder="Rechercher un client ou document..." />
+            <select id="reminderFilter">
+              <option value="all">Toutes</option>
+              <option value="first">1ère relance</option>
+              <option value="second">2ème relance</option>
+              <option value="formal">Mise en demeure</option>
+            </select>
+          </div>
+          <div id="remindersTableWrap" class="table-wrap"></div>
         </div>
       </section>
 
@@ -249,12 +273,24 @@
           <input name="date" type="date" required />
         </label>
         <label>
+          Échéance
+          <input name="dueDate" type="date" />
+        </label>
+        <label>
           Période / objet
           <input name="period" type="text" placeholder="Ex : Loyer avril 2026" required />
         </label>
         <label>
           Montant (€)
           <input name="amount" type="number" step="0.01" min="0" required />
+        </label>
+        <label>
+          Charges (€)
+          <input name="charges" type="number" step="0.01" min="0" value="0" />
+        </label>
+        <label>
+          TVA (%)
+          <input name="vatRate" type="number" step="0.01" min="0" value="0" />
         </label>
         <label>
           Statut

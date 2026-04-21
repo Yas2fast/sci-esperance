@@ -500,14 +500,15 @@ th {
 /* Nouveau style document simple type Apple */
 .apple-doc {
   max-width: 900px;
+  width: 100%;
   margin: 0 auto;
   background: #fff;
   color: #000;
-  padding: 8px 0 30px;
+  padding: 8px 0 0;
   font-family: Arial, sans-serif;
-  min-height: 1120px;
-  display: flex;
-  flex-direction: column;
+  height: 1122px;
+  display: grid;
+  grid-template-rows: auto auto auto auto 1fr auto;
 }
 
 .apple-doc-header {
@@ -606,8 +607,10 @@ th {
 }
 
 .apple-doc-footer {
-  margin-top: auto;
-  padding-top: 30px;
+  align-self: end;
+  margin-top: 0;
+  padding-top: 20px;
+  padding-bottom: 10px;
   text-align: center;
   font-size: 12px;
 }

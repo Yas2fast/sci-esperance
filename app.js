@@ -1208,3 +1208,24 @@ function runMonthlyGenerationIfNeeded() {
 bindEvents();
 runMonthlyGenerationIfNeeded();
 refreshAll();
+function toggleMenu(id) {
+  document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('active'));
+  const el = document.getElementById(`menu-${id}`);
+  el.classList.toggle('active');
+}
+
+function duplicateDocument(id) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+
+  const copy = {
+    ...doc,
+    id: uid('doc'),
+    number: nextDocumentNumber(doc.type),
+    date: new Date().toISOString().slice(0, 10),
+    status: doc.type === 'quittance' ? 'paid' : 'unpaid'
+  };
+
+  state.documents.push(copy);
+  refreshAll();
+}

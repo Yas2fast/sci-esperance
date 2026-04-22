@@ -438,6 +438,32 @@ th {
   text-align: center;
 }
 
+/* Badge statut */
+.doc-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 12px auto;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  border: 2px solid;
+}
+
+.paid-badge {
+  color: #16a34a;
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.unpaid-badge {
+  color: #dc2626;
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+
 /* Facture */
 .apple-doc {
   max-width: 900px;
@@ -482,7 +508,7 @@ th {
 }
 
 .apple-doc-meta h1 {
-  margin: 0 0 20px;
+  margin: 0 0 16px;
   font-size: 28px;
   font-weight: 800;
   letter-spacing: 1px;
@@ -541,13 +567,13 @@ th {
 
 .invoice-signature-row {
   margin-top: 18px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   padding-right: 32px;
 }
 
 .invoice-stamp {
-  max-width: 260px;
-  max-height: 115px;
+  max-width: 225px;
+  max-height: 98px;
   object-fit: contain;
 }
 
@@ -555,17 +581,17 @@ th {
   align-self: end;
   margin-top: 0;
   padding-top: 20px;
-  padding-bottom: 10px;
+  padding-bottom: 6px;
   text-align: center;
   font-size: 12px;
 }
 
 /* Quittance redesign */
 .receipt-doc {
-  height: auto;
   min-height: 1122px;
-  display: block;
-  padding: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 8px;
   color: #16324f;
 }
 
@@ -611,7 +637,7 @@ th {
   font-size: 24px;
   font-weight: 800;
   color: var(--receipt-blue);
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   letter-spacing: 0.5px;
 }
 
@@ -651,14 +677,7 @@ th {
 }
 
 .receipt-highlight {
-  background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
-  border: 1px solid #d8e7fb;
-  border-radius: 16px;
-  padding: 16px 18px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #1f3b57;
-  margin-bottom: 22px;
+  display: none;
 }
 
 .receipt-table {
@@ -708,19 +727,20 @@ th {
 
 .receipt-signature-row {
   justify-content: flex-end;
-  margin-top: 26px;
-  margin-bottom: 10px;
+  margin-top: 22px;
+  margin-bottom: 4px;
   padding-right: 24px;
 }
 
 .receipt-stamp {
-  max-width: 245px;
-  max-height: 108px;
+  max-width: 215px;
+  max-height: 94px;
   object-fit: contain;
 }
 
 .receipt-footer {
-  margin-top: 34px;
+  margin-top: auto;
+  padding-top: 24px;
   text-align: center;
 }
 
@@ -774,6 +794,11 @@ th {
   .invoice-signature-row {
     justify-content: flex-start;
     padding-right: 0;
+  }
+
+  .doc-status-badge {
+    margin-left: 0;
+    margin-right: auto;
   }
 }
 

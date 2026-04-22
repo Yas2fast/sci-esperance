@@ -71,6 +71,15 @@ function escapeHtml(str) {
   }[m]));
 }
 
+/* 🔥 NOUVELLE FONCTION AJOUTÉE */
+function getNextMonthFifth() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const nextMonthDate = new Date(year, month + 1, 5);
+  return nextMonthDate.toISOString().slice(0, 10);
+}
+
 function setView(view) {
   const titles = {
     dashboard: ['Tableau de bord', 'Vue rapide de votre activité'],
@@ -93,293 +102,29 @@ function setView(view) {
   byId('pageSubtitle').textContent = titles[view][1];
 }
 
-function renderStats() {
-  const paidTotal = state.documents
-    .filter(d => d.status === 'paid' && (d.type === 'facture' || d.type === 'quittance'))
-    .reduce((a, b) => a + Number(b.amount || 0), 0);
-
-  const unpaidTotal = state.documents
-    .filter(d => d.status === 'unpaid' && (d.type === 'facture' || d.type === 'quittance'))
-    .reduce((a, b) => a + Number(b.amount || 0), 0);
-
-  byId('statClients').textContent = state.clients.length;
-  byId('statDocuments').textContent = state.documents.filter(d => d.type === 'facture' || d.type === 'quittance').length;
-  byId('statPaid').textContent = formatMoney(paidTotal);
-  byId('statUnpaid').textContent = formatMoney(unpaidTotal);
-}
-
-function renderRecentDocuments() {
-  const wrap = byId('recentDocuments');
-  const docs = [...state.documents]
-    .filter(d => d.type === 'facture' || d.type === 'quittance')
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 6);
-
-  if (!docs.length) {
-    wrap.innerHTML = '<div class="empty">Aucun document pour le moment.</div>';
-    return;
-  }
-
-  wrap.innerHTML = docs.map(doc => {
-    const client = state.clients.find(c => c.id === doc.clientId);
-    return `
-      <div class="list-item">
-        <div>
-          <strong>${escapeHtml(doc.number)} — ${escapeHtml(doc.period)}</strong>
-          <small>${doc.type === 'facture' ? 'Facture' : 'Quittance'} · ${escapeHtml(client?.name || 'Client supprimé')} · ${formatDate(doc.date)}</small>
-        </div>
-        <div>
-          <div class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function renderClients() {
-  const query = byId('clientSearch').value.trim().toLowerCase();
-  const rows = state.clients.filter(c => {
-    const txt = `${c.name} ${c.email} ${c.phone} ${c.property}`.toLowerCase();
-    return txt.includes(query);
-  });
-
-  const wrap = byId('clientsTableWrap');
-  if (!rows.length) {
-    wrap.innerHTML = '<div class="empty">Aucun client trouvé.</div>';
-    return;
-  }
-
-  wrap.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Nom</th>
-          <th>Contact</th>
-          <th>Bien</th>
-          <th>Loyer</th>
-          <th>Échéance</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(client => `
-          <tr>
-            <td><strong>${escapeHtml(client.name)}</strong><br><small>${escapeHtml(client.address || '')}</small></td>
-            <td>${escapeHtml(client.email || '—')}<br><small>${escapeHtml(client.phone || '')}</small></td>
-            <td>${escapeHtml(client.property || '—')}</td>
-            <td>${client.rentAmount ? formatMoney(client.rentAmount) : '—'}</td>
-            <td>${client.dueDay || '—'}</td>
-            <td>
-              <div class="action-row">
-                <button class="link-btn" onclick="editClient('${client.id}')">Modifier</button>
-                <button class="link-btn" onclick="createDocForClient('${client.id}','facture')">Facture</button>
-                <button class="link-btn" onclick="createDocForClient('${client.id}','quittance')">Quittance</button>
-                <button class="danger-link" onclick="deleteClient('${client.id}')">Supprimer</button>
-              </div>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-function renderDocuments() {
-  const query = byId('documentSearch').value.trim().toLowerCase();
-  const filter = byId('documentFilter').value;
-
-  const docs = [...state.documents]
-    .filter(doc => doc.type === 'facture' || doc.type === 'quittance')
-    .filter(doc => {
-      const client = state.clients.find(c => c.id === doc.clientId);
-      const txt = `${doc.number} ${doc.period} ${client?.name || ''} ${doc.notes || ''}`.toLowerCase();
-      const matchQuery = txt.includes(query);
-      const matchFilter = filter === 'all' || doc.type === filter || doc.status === filter;
-      return matchQuery && matchFilter;
-    })
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  const wrap = byId('documentsTableWrap');
-  if (!docs.length) {
-    wrap.innerHTML = '<div class="empty">Aucun document trouvé.</div>';
-    return;
-  }
-
-  wrap.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Numéro</th>
-          <th>Client</th>
-          <th>Période</th>
-          <th>Date</th>
-          <th>Montant</th>
-          <th>Statut</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${docs.map(doc => {
-          const client = state.clients.find(c => c.id === doc.clientId);
-          return `
-            <tr>
-              <td><span class="tag ${doc.type}">${doc.type === 'facture' ? 'Facture' : 'Quittance'}</span></td>
-              <td><strong>${escapeHtml(doc.number)}</strong></td>
-              <td>${escapeHtml(client?.name || 'Client supprimé')}</td>
-              <td>${escapeHtml(doc.period)}</td>
-              <td>${formatDate(doc.date)}</td>
-              <td>${formatMoney(doc.amount)}</td>
-              <td><span class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</span></td>
-              <td>
-                <div class="action-row">
-                  <button class="link-btn" onclick="previewDocument('${doc.id}')">Voir</button>
-                  <button class="link-btn" onclick="toggleStatus('${doc.id}')">${doc.status === 'paid' ? 'Mettre impayé' : 'Mettre payé'}</button>
-                  <button class="link-btn" onclick="editDocument('${doc.id}')">Modifier</button>
-                  <button class="danger-link" onclick="deleteDocument('${doc.id}')">Supprimer</button>
-                </div>
-              </td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-function renderReminders() {
-  const wrap = byId('remindersTableWrap');
-  if (!wrap) return;
-
-  const query = (byId('reminderSearch')?.value || '').trim().toLowerCase();
-  const filter = byId('reminderFilter')?.value || 'all';
-
-  const docs = [...state.documents]
-    .filter(doc => doc.type === 'facture' && doc.status === 'unpaid')
-    .filter(doc => {
-      const client = state.clients.find(c => c.id === doc.clientId);
-      const reminderLevel = getReminderLevel(doc);
-      const txt = `${doc.number} ${doc.period} ${client?.name || ''}`.toLowerCase();
-      const matchQuery = txt.includes(query);
-      const matchFilter =
-        filter === 'all' ||
-        (filter === 'first' && reminderLevel === 1) ||
-        (filter === 'second' && reminderLevel === 2) ||
-        (filter === 'formal' && reminderLevel >= 3);
-      return matchQuery && matchFilter;
-    })
-    .sort((a, b) => new Date(a.dueDate || a.date) - new Date(b.dueDate || b.date));
-
-  if (!docs.length) {
-    wrap.innerHTML = '<div class="empty">Aucune relance à afficher.</div>';
-    return;
-  }
-
-  wrap.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Niveau</th>
-          <th>Document</th>
-          <th>Client</th>
-          <th>Échéance</th>
-          <th>Retard</th>
-          <th>Montant</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${docs.map(doc => {
-          const client = state.clients.find(c => c.id === doc.clientId);
-          const level = getReminderLevel(doc);
-          const overdueDays = getOverdueDays(doc);
-          const levelLabel = level === 1 ? '1ère relance' : level === 2 ? '2ème relance' : 'Mise en demeure';
-          const tagClass = level === 1 ? 'relance' : level === 2 ? 'relance' : 'mise-en-demeure';
-
-          return `
-            <tr class="reminder-level-${level}">
-              <td><span class="tag ${tagClass}">${levelLabel}</span></td>
-              <td><strong>${escapeHtml(doc.number)}</strong><br><small>${escapeHtml(doc.period)}</small></td>
-              <td>${escapeHtml(client?.name || 'Client supprimé')}</td>
-              <td>${formatDate(doc.dueDate || doc.date)}</td>
-              <td>${overdueDays > 0 ? `${overdueDays} jour(s)` : '—'}</td>
-              <td>${formatMoney(doc.amount)}</td>
-              <td>
-                <button class="link-btn" onclick="previewReminder('${doc.id}', ${level})">Voir</button>
-              </td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-function renderSettings() {
-  const form = byId('settingsForm');
-  Object.entries(state.settings).forEach(([key, value]) => {
-    if (form.elements[key]) form.elements[key].value = value || '';
-  });
-}
-
-function refreshAll() {
-  renderStats();
-  renderRecentDocuments();
-  renderClients();
-  renderDocuments();
-  renderReminders();
-  renderSettings();
-  populateClientOptions();
-  saveState();
-}
-
-function openClientModal(client = null) {
-  const dialog = byId('clientDialog');
-  const form = byId('clientForm');
-  form.reset();
-
-  byId('clientModalTitle').textContent = client ? 'Modifier le client' : 'Nouveau client';
-  form.elements.id.value = client?.id || '';
-
-  ['name', 'email', 'phone', 'property', 'rentAmount', 'dueDay', 'address', 'notes'].forEach(field => {
-    form.elements[field].value = client?.[field] || '';
-  });
-
-  dialog.showModal();
-}
-
-function populateClientOptions(selectedId = '') {
-  const select = byId('documentForm').elements.clientId;
-  select.innerHTML = state.clients.length
-    ? state.clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.property ? ' — ' + escapeHtml(c.property) : ''}</option>`).join('')
-    : '<option value="">Aucun client</option>';
-
-  if (selectedId) select.value = selectedId;
-}
-
-function nextDocumentNumber(type) {
-  const year = new Date().getFullYear();
-  const prefix = type === 'facture' ? 'FAC' : 'QUI';
-  const count = state.documents.filter(d => d.type === type && String(d.number || '').startsWith(`${prefix}-${year}`)).length + 1;
-  return `${prefix}-${year}-${String(count).padStart(3, '0')}`;
-}
-
+/* 🔥 PARTIE MODIFIÉE ICI */
 function openDocumentModal(doc = null, presetType = 'facture', presetClientId = '') {
   const dialog = byId('documentDialog');
   const form = byId('documentForm');
   form.reset();
 
   const type = doc?.type || presetType;
+
   byId('documentModalTitle').textContent = doc
     ? 'Modifier le document'
     : `Nouvelle ${type === 'facture' ? 'facture' : 'quittance'}`;
 
   form.elements.id.value = doc?.id || '';
   form.elements.type.value = type;
+
   populateClientOptions(doc?.clientId || presetClientId);
+
   form.elements.number.value = doc?.number || nextDocumentNumber(type);
   form.elements.date.value = doc?.date || new Date().toISOString().slice(0, 10);
-  form.elements.dueDate.value = doc?.dueDate || doc?.date || new Date().toISOString().slice(0, 10);
+
+  /* 🔥 ICI LA MODIF IMPORTANTE */
+  form.elements.dueDate.value = doc?.dueDate || getNextMonthFifth();
+
   form.elements.period.value = doc?.period || '';
   form.elements.amount.value = doc?.amount || '';
   form.elements.charges.value = doc?.charges || 0;
@@ -390,7 +135,11 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   if (!doc && presetClientId) {
     const client = state.clients.find(c => c.id === presetClientId);
     if (client?.rentAmount) form.elements.amount.value = client.rentAmount;
-    form.elements.period.value = `Loyer ${new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date())}`;
+
+    form.elements.period.value = `Loyer ${new Intl.DateTimeFormat('fr-FR', {
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date())}`;
   }
 
   dialog.showModal();

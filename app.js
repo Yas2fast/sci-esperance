@@ -430,21 +430,9 @@ function getReminderLabel(level) {
   return 'Mise en demeure';
 }
 
-function createDocumentHtml(doc) {
-  const client = state.clients.find(c => c.id === doc.clientId) || {};
-  const s = state.settings;
-  const isInvoice = doc.type === 'facture';
-  const typeTitle = isInvoice ? 'FACTURE' : 'QUITTANCE DE LOYER';
-
-  const totalAmount = Number(doc.amount || 0);
-  const charges = Number(doc.charges || 0);
-  const vatRate = Number(doc.vatRate || 0);
-  const rentOnly = Math.max(0, totalAmount - charges);
-  const vatAmount = totalAmount * (vatRate / 100);
-  const totalTtc = totalAmount + vatAmount;
-
+function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc) {
   return `
-    <div class="doc-sheet apple-doc">
+    <div class="doc-sheet apple-doc invoice-doc">
       <div class="apple-doc-header">
         <div class="apple-doc-company">
           <h2>SCI DE L'ESPERANCE</h2>
@@ -452,7 +440,7 @@ function createDocumentHtml(doc) {
           ${s.siret ? `<p>SIRET : ${escapeHtml(s.siret)}</p>` : ''}
         </div>
         <div class="apple-doc-meta">
-          <h1>${typeTitle}</h1>
+          <h1>FACTURE</h1>
           <p><strong>N° :</strong> ${escapeHtml(doc.number)}</p>
           <p><strong>Date :</strong> ${formatDate(doc.date)}</p>
           <p><strong>Échéance :</strong> ${formatDate(doc.dueDate || doc.date)}</p>
@@ -509,8 +497,8 @@ function createDocumentHtml(doc) {
           : ''
       }
 
-      <div class="apple-doc-signature-row">
-        <img src="tampon-signature.png" class="apple-doc-stamp" alt="Tampon et signature">
+      <div class="apple-doc-signature-row invoice-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp invoice-stamp" alt="Tampon et signature">
       </div>
 
       <div class="apple-doc-footer">
@@ -519,6 +507,121 @@ function createDocumentHtml(doc) {
       </div>
     </div>
   `;
+}
+
+function createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc) {
+  return `
+    <div class="doc-sheet apple-doc receipt-doc">
+      <div class="receipt-top-bar"></div>
+
+      <div class="receipt-header">
+        <div class="receipt-company-block">
+          <div class="receipt-company-name">SCI DE L'ESPERANCE</div>
+          <div class="receipt-company-lines">
+            35 RUE DES CAILLOUX<br>
+            92110 CLICHY<br>
+            ${s.siret ? `SIRET : ${escapeHtml(s.siret)}` : ''}
+          </div>
+        </div>
+
+        <div class="receipt-title-block">
+          <div class="receipt-title">QUITTANCE DE LOYER</div>
+          <div class="receipt-meta-line"><strong>N° :</strong> ${escapeHtml(doc.number)}</div>
+          <div class="receipt-meta-line"><strong>Date :</strong> ${formatDate(doc.date)}</div>
+          <div class="receipt-meta-line"><strong>Période :</strong> ${escapeHtml(doc.period || '')}</div>
+        </div>
+      </div>
+
+      <div class="receipt-card-grid">
+        <div class="receipt-card">
+          <div class="receipt-card-title">Locataire</div>
+          <div class="receipt-card-body">
+            <strong>${escapeHtml(client.name || '')}</strong><br>
+            ${escapeHtml(client.address || '')}
+          </div>
+        </div>
+
+        <div class="receipt-card">
+          <div class="receipt-card-title">Bien concerné</div>
+          <div class="receipt-card-body">
+            ${escapeHtml(client.property || '—')}
+          </div>
+        </div>
+      </div>
+
+      <div class="receipt-highlight">
+        Nous reconnaissons avoir reçu de <strong>${escapeHtml(client.name || '')}</strong> la somme de
+        <strong>${formatMoney(totalTtc)}</strong> au titre de la période
+        <strong>${escapeHtml(doc.period || '')}</strong>.
+      </div>
+
+      <table class="receipt-table">
+        <thead>
+          <tr>
+            <th>Détail</th>
+            <th>Montant</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Loyer</td>
+            <td>${formatMoney(Math.max(0, totalAmount - charges))}</td>
+          </tr>
+          ${
+            charges > 0
+              ? `
+              <tr>
+                <td>Charges</td>
+                <td>${formatMoney(charges)}</td>
+              </tr>
+            `
+              : ''
+          }
+          <tr class="receipt-total-row">
+            <td>Total réglé</td>
+            <td>${formatMoney(totalTtc)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="receipt-note">
+        Cette quittance annule tout reçu donné antérieurement pour le même objet.
+      </div>
+
+      ${
+        doc.notes
+          ? `<div class="receipt-extra-note"><strong>Notes :</strong> ${escapeHtml(doc.notes)}</div>`
+          : ''
+      }
+
+      <div class="apple-doc-signature-row receipt-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp receipt-stamp" alt="Tampon et signature">
+      </div>
+
+      <div class="apple-doc-footer receipt-footer">
+        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
+        35 RUE DES CAILLOUX 92110 CLICHY
+      </div>
+    </div>
+  `;
+}
+
+function createDocumentHtml(doc) {
+  const client = state.clients.find(c => c.id === doc.clientId) || {};
+  const s = state.settings;
+
+  const totalAmount = Number(doc.amount || 0);
+  const charges = Number(doc.charges || 0);
+  const vatRate = Number(doc.vatRate || 0);
+  const rentOnly = Math.max(0, totalAmount - charges);
+  const vatAmount = totalAmount * (vatRate / 100);
+  const totalTtc = totalAmount + vatAmount;
+
+  if (doc.type === 'quittance') {
+    return createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc);
+  }
+
+  return createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc);
 }
 
 function createReminderHtml(doc, level) {
@@ -568,8 +671,8 @@ function createReminderHtml(doc, level) {
         <p>Veuillez agréer, Madame, Monsieur, l’expression de nos salutations distinguées.</p>
       </div>
 
-      <div class="apple-doc-signature-row">
-        <img src="tampon-signature.png" class="apple-doc-stamp" alt="Tampon et signature">
+      <div class="apple-doc-signature-row invoice-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp invoice-stamp" alt="Tampon et signature">
       </div>
 
       <div class="apple-doc-footer">
@@ -637,8 +740,8 @@ async function downloadCurrentPdf() {
       heightLeft -= usableHeight;
     }
 
-    const titleEl = printArea.querySelector('.apple-doc-meta h1');
-    const numberParagraph = Array.from(printArea.querySelectorAll('.apple-doc-meta p'))
+    const titleEl = printArea.querySelector('.apple-doc-meta h1, .receipt-title');
+    const numberParagraph = Array.from(printArea.querySelectorAll('.apple-doc-meta p, .receipt-meta-line'))
       .find(p => p.textContent.includes('N°'));
 
     const rawTitle = titleEl ? titleEl.textContent.trim() : 'document';

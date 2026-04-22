@@ -12,6 +12,8 @@
   --danger: #dc2626;
   --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
   --radius: 18px;
+  --receipt-blue: #244f87;
+  --receipt-blue-soft: #eaf2fb;
 }
 
 * {
@@ -428,67 +430,6 @@ th {
   color: #111827;
 }
 
-.doc-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 30px;
-}
-
-.doc-title {
-  font-size: 2rem;
-  font-weight: 800;
-  margin: 0 0 8px;
-}
-
-.doc-muted {
-  color: #64748b;
-}
-
-.doc-boxes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.doc-box {
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 16px;
-}
-
-.doc-table {
-  width: 100%;
-  margin: 20px 0;
-  border-collapse: collapse;
-}
-
-.doc-table th,
-.doc-table td {
-  border: 1px solid #e5e7eb;
-  padding: 12px;
-}
-
-.doc-total {
-  display: flex;
-  justify-content: flex-end;
-  margin: 20px 0;
-}
-
-.doc-total-box {
-  min-width: 280px;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 16px;
-}
-
-.doc-footer {
-  margin-top: 24px;
-  font-size: 0.95rem;
-  color: #475569;
-}
-
 .empty {
   padding: 22px;
   border: 1px dashed #cbd5e1;
@@ -497,7 +438,7 @@ th {
   text-align: center;
 }
 
-/* Nouveau style document simple type Apple */
+/* Facture */
 .apple-doc {
   max-width: 900px;
   width: 100%;
@@ -542,7 +483,7 @@ th {
 
 .apple-doc-meta h1 {
   margin: 0 0 20px;
-  font-size: 34px;
+  font-size: 28px;
   font-weight: 800;
   letter-spacing: 1px;
 }
@@ -594,15 +535,19 @@ th {
 
 .apple-doc-signature-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: flex-end;
-  gap: 20px;
-  margin-top: 36px;
 }
 
-.apple-doc-stamp,
-.apple-doc-signature {
-  max-height: 90px;
+.invoice-signature-row {
+  margin-top: 18px;
+  margin-bottom: 8px;
+  padding-right: 32px;
+}
+
+.invoice-stamp {
+  max-width: 260px;
+  max-height: 115px;
   object-fit: contain;
 }
 
@@ -613,6 +558,170 @@ th {
   padding-bottom: 10px;
   text-align: center;
   font-size: 12px;
+}
+
+/* Quittance redesign */
+.receipt-doc {
+  height: auto;
+  min-height: 1122px;
+  display: block;
+  padding: 0 0 20px;
+  color: #16324f;
+}
+
+.receipt-top-bar {
+  height: 12px;
+  background: var(--receipt-blue);
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 26px;
+}
+
+.receipt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 28px;
+  margin-bottom: 26px;
+}
+
+.receipt-company-block {
+  flex: 1;
+}
+
+.receipt-company-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--receipt-blue);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.receipt-company-lines {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #36526f;
+}
+
+.receipt-title-block {
+  min-width: 280px;
+  text-align: right;
+}
+
+.receipt-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--receipt-blue);
+  margin-bottom: 14px;
+  letter-spacing: 0.5px;
+}
+
+.receipt-meta-line {
+  font-size: 13px;
+  color: #36526f;
+  margin-bottom: 6px;
+}
+
+.receipt-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.receipt-card {
+  border: 1px solid #dce7f5;
+  background: #f8fbff;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.receipt-card-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--receipt-blue);
+  margin-bottom: 10px;
+}
+
+.receipt-card-body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f3b57;
+}
+
+.receipt-highlight {
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
+  border: 1px solid #d8e7fb;
+  border-radius: 16px;
+  padding: 16px 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1f3b57;
+  margin-bottom: 22px;
+}
+
+.receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0;
+  margin-bottom: 20px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid #dce7f5;
+}
+
+.receipt-table thead th {
+  background: var(--receipt-blue);
+  color: #fff;
+  border-bottom: none;
+  font-size: 13px;
+  padding: 14px 16px;
+}
+
+.receipt-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5edf8;
+  font-size: 14px;
+  color: #1f3b57;
+}
+
+.receipt-total-row td {
+  font-weight: 800;
+  color: var(--receipt-blue);
+  background: #f8fbff;
+}
+
+.receipt-note {
+  font-size: 13px;
+  color: #48637e;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.receipt-extra-note {
+  margin-top: 16px;
+  font-size: 13px;
+  color: #48637e;
+  line-height: 1.5;
+}
+
+.receipt-signature-row {
+  justify-content: flex-end;
+  margin-top: 26px;
+  margin-bottom: 10px;
+  padding-right: 24px;
+}
+
+.receipt-stamp {
+  max-width: 245px;
+  max-height: 108px;
+  object-fit: contain;
+}
+
+.receipt-footer {
+  margin-top: 34px;
+  text-align: center;
 }
 
 /* Relances */
@@ -640,8 +749,7 @@ th {
 
   .stats-grid,
   .panel-grid,
-  .form-grid,
-  .doc-boxes {
+  .form-grid {
     grid-template-columns: 1fr;
   }
 
@@ -650,17 +758,22 @@ th {
     align-items: stretch;
   }
 
-  .apple-doc-header {
-    flex-direction: column;
+  .apple-doc-header,
+  .receipt-header,
+  .receipt-card-grid {
+    grid-template-columns: 1fr;
+    display: grid;
   }
 
-  .apple-doc-meta {
+  .apple-doc-meta,
+  .receipt-title-block {
     text-align: left;
   }
 
-  .apple-doc-signature-row {
-    flex-direction: column;
-    align-items: flex-start;
+  .receipt-signature-row,
+  .invoice-signature-row {
+    justify-content: flex-start;
+    padding-right: 0;
   }
 }
 
@@ -686,7 +799,8 @@ th {
   }
 
   .doc-sheet,
-  .apple-doc {
+  .apple-doc,
+  .receipt-doc {
     max-width: none;
   }
 }

@@ -26,10 +26,15 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(defaultData);
     const parsed = JSON.parse(raw);
+
     return {
       settings: { ...defaultData.settings, ...(parsed.settings || {}) },
-      clients: Array.isArray(parsed.clients) ? parsed.clients : [],
-      documents: Array.isArray(parsed.documents) ? parsed.documents : [],
+      clients: Array.isArray(parsed.clients)
+        ? parsed.clients.map(normalizeClient)
+        : [],
+      documents: Array.isArray(parsed.documents)
+        ? parsed.documents.map(normalizeDocument)
+        : [],
     };
   } catch {
     return structuredClone(defaultData);
@@ -38,6 +43,47 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function normalizeClient(client = {}) {
+  return {
+    id: client.id || uid('client'),
+    name: client.name || '',
+    email: client.email || '',
+    phone: client.phone || '',
+    property: client.property || '',
+    rentAmount: Number(client.rentAmount || 0),
+    chargesAmount: Number(client.chargesAmount || 0),
+    dueDay: client.dueDay ? Number(client.dueDay) : '',
+    address: client.address || '',
+    notes: client.notes || '',
+    leaseStartDate: client.leaseStartDate || '',
+    leaseEndDate: client.leaseEndDate || '',
+    securityDeposit: Number(client.securityDeposit || 0),
+    paymentMethod: client.paymentMethod || '',
+    paymentFrequency: client.paymentFrequency || 'mensuel',
+    tenantStatus: client.tenantStatus || 'actif',
+    guarantorName: client.guarantorName || '',
+    guarantorPhone: client.guarantorPhone || '',
+    guarantorEmail: client.guarantorEmail || '',
+  };
+}
+
+function normalizeDocument(doc = {}) {
+  return {
+    id: doc.id || uid('doc'),
+    type: doc.type || 'facture',
+    clientId: doc.clientId || '',
+    number: doc.number || '',
+    date: doc.date || getTodayIso(),
+    dueDate: doc.dueDate || getNextMonthFifth(),
+    period: doc.period || '',
+    amount: Number(doc.amount || 0),
+    charges: Number(doc.charges || 0),
+    vatRate: Number(doc.vatRate || 0),
+    status: doc.status || 'unpaid',
+    notes: doc.notes || '',
+  };
 }
 
 function uid(prefix = 'id') {
@@ -203,6 +249,15 @@ function getDueBadgeHtml(doc) {
   return `<span class="tag facture">À venir</span>`;
 }
 
+function getClientStatusLabel(status) {
+  const map = {
+    actif: 'Actif',
+    sortant: 'Sortant',
+    archive: 'Archivé',
+  };
+  return map[status] || status || 'Actif';
+}
+
 function populateClientOptions(selectedId = '') {
   const form = byId('documentForm');
   if (!form || !form.elements.clientId) return;
@@ -219,6 +274,12 @@ function populateClientOptions(selectedId = '') {
   }
 }
 
+function setFormValue(form, field, value) {
+  if (form?.elements?.[field]) {
+    form.elements[field].value = value ?? '';
+  }
+}
+
 function openClientModal(client = null) {
   const dialog = byId('clientDialog');
   const form = byId('clientForm');
@@ -226,12 +287,31 @@ function openClientModal(client = null) {
 
   form.reset();
   byId('clientModalTitle').textContent = client ? 'Modifier le client' : 'Nouveau client';
-  form.elements.id.value = client?.id || '';
 
-  ['name', 'email', 'phone', 'property', 'rentAmount', 'dueDay', 'address', 'notes'].forEach(field => {
-    if (form.elements[field]) {
-      form.elements[field].value = client?.[field] || '';
-    }
+  const safeClient = normalizeClient(client || {});
+  setFormValue(form, 'id', client?.id || '');
+
+  [
+    'name',
+    'email',
+    'phone',
+    'property',
+    'rentAmount',
+    'chargesAmount',
+    'dueDay',
+    'address',
+    'notes',
+    'leaseStartDate',
+    'leaseEndDate',
+    'securityDeposit',
+    'paymentMethod',
+    'paymentFrequency',
+    'tenantStatus',
+    'guarantorName',
+    'guarantorPhone',
+    'guarantorEmail',
+  ].forEach(field => {
+    setFormValue(form, field, safeClient[field]);
   });
 
   dialog.showModal();
@@ -249,23 +329,24 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
     ? 'Modifier le document'
     : `Nouvelle ${type === 'facture' ? 'facture' : 'quittance'}`;
 
-  form.elements.id.value = doc?.id || '';
-  form.elements.type.value = type;
+  setFormValue(form, 'id', doc?.id || '');
+  setFormValue(form, 'type', type);
   populateClientOptions(doc?.clientId || presetClientId);
-  form.elements.number.value = doc?.number || nextDocumentNumber(type);
-  form.elements.date.value = doc?.date || getTodayIso();
-  form.elements.dueDate.value = doc?.dueDate || getNextMonthFifth();
-  form.elements.period.value = doc?.period || '';
-  form.elements.amount.value = doc?.amount || '';
-  form.elements.charges.value = doc?.charges || 0;
-  form.elements.vatRate.value = doc?.vatRate ?? 0;
-  form.elements.status.value = doc?.status || (type === 'quittance' ? 'paid' : 'unpaid');
-  form.elements.notes.value = doc?.notes || '';
+  setFormValue(form, 'number', doc?.number || nextDocumentNumber(type));
+  setFormValue(form, 'date', doc?.date || getTodayIso());
+  setFormValue(form, 'dueDate', doc?.dueDate || getNextMonthFifth());
+  setFormValue(form, 'period', doc?.period || '');
+  setFormValue(form, 'amount', doc?.amount || '');
+  setFormValue(form, 'charges', doc?.charges || 0);
+  setFormValue(form, 'vatRate', doc?.vatRate ?? 0);
+  setFormValue(form, 'status', doc?.status || (type === 'quittance' ? 'paid' : 'unpaid'));
+  setFormValue(form, 'notes', doc?.notes || '');
 
   if (!doc && presetClientId) {
     const client = state.clients.find(c => c.id === presetClientId);
-    if (client?.rentAmount) form.elements.amount.value = client.rentAmount;
-    form.elements.period.value = getPeriodLabelFromDate(new Date());
+    if (client?.rentAmount) setFormValue(form, 'amount', client.rentAmount);
+    if (form.elements.charges && client?.chargesAmount) setFormValue(form, 'charges', client.chargesAmount);
+    setFormValue(form, 'period', getPeriodLabelFromDate(new Date()));
   }
 
   dialog.showModal();
@@ -730,7 +811,20 @@ function renderClients() {
 
   const query = (byId('clientSearch')?.value || '').trim().toLowerCase();
   const rows = state.clients.filter(c => {
-    const txt = `${c.name} ${c.email} ${c.phone} ${c.property}`.toLowerCase();
+    const txt = `
+      ${c.name}
+      ${c.email}
+      ${c.phone}
+      ${c.property}
+      ${c.address}
+      ${c.notes}
+      ${c.guarantorName}
+      ${c.guarantorPhone}
+      ${c.guarantorEmail}
+      ${c.paymentMethod}
+      ${c.tenantStatus}
+    `.toLowerCase();
+
     return txt.includes(query);
   });
 
@@ -748,17 +842,39 @@ function renderClients() {
           <th>Bien</th>
           <th>Loyer</th>
           <th>Échéance</th>
+          <th>Infos bail</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         ${rows.map(client => `
           <tr>
-            <td><strong>${escapeHtml(client.name)}</strong><br><small>${escapeHtml(client.address || '')}</small></td>
-            <td>${escapeHtml(client.email || '—')}<br><small>${escapeHtml(client.phone || '')}</small></td>
-            <td>${escapeHtml(client.property || '—')}</td>
-            <td>${client.rentAmount ? formatMoney(client.rentAmount) : '—'}</td>
-            <td>${client.dueDay || '—'}</td>
+            <td>
+              <strong>${escapeHtml(client.name)}</strong><br>
+              <small>${escapeHtml(client.address || '')}</small><br>
+              <small>${escapeHtml(getClientStatusLabel(client.tenantStatus))}</small>
+            </td>
+            <td>
+              ${escapeHtml(client.email || '—')}<br>
+              <small>${escapeHtml(client.phone || '')}</small>
+              ${client.guarantorName ? `<br><small>Garant : ${escapeHtml(client.guarantorName)}</small>` : ''}
+            </td>
+            <td>
+              ${escapeHtml(client.property || '—')}
+            </td>
+            <td>
+              ${client.rentAmount ? formatMoney(client.rentAmount) : '—'}
+              ${client.chargesAmount ? `<br><small>Charges : ${formatMoney(client.chargesAmount)}</small>` : ''}
+            </td>
+            <td>
+              ${client.dueDay || '—'}
+              ${client.paymentMethod ? `<br><small>${escapeHtml(client.paymentMethod)}</small>` : ''}
+            </td>
+            <td>
+              <small>Entrée : ${formatDate(client.leaseStartDate)}</small><br>
+              <small>Fin : ${formatDate(client.leaseEndDate)}</small><br>
+              <small>Dépôt : ${client.securityDeposit ? formatMoney(client.securityDeposit) : '—'}</small>
+            </td>
             <td>
               <div class="action-row">
                 <button class="link-btn" type="button" onclick="editClient('${client.id}')">Modifier</button>
@@ -963,8 +1079,12 @@ function importData(e) {
       const parsed = JSON.parse(reader.result);
       state = {
         settings: { ...defaultData.settings, ...(parsed.settings || {}) },
-        clients: Array.isArray(parsed.clients) ? parsed.clients : [],
-        documents: Array.isArray(parsed.documents) ? parsed.documents : [],
+        clients: Array.isArray(parsed.clients)
+          ? parsed.clients.map(normalizeClient)
+          : [],
+        documents: Array.isArray(parsed.documents)
+          ? parsed.documents.map(normalizeDocument)
+          : [],
       };
       refreshAll();
       alert('Données importées.');
@@ -984,11 +1104,16 @@ function runMonthlyGenerationIfNeeded() {
 
   const period = getPeriodLabelFromDate(now);
   const docDate = getTodayIso();
-  const dueDate = getCurrentMonthFifth(now);
 
   state.clients.forEach(client => {
     const rentAmount = Number(client.rentAmount || 0);
+    const chargesAmount = Number(client.chargesAmount || 0);
     if (rentAmount <= 0) return;
+
+    const dueDay = Number(client.dueDay || 5);
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const dueDate = new Date(year, month, dueDay).toISOString().slice(0, 10);
 
     const alreadyHasInvoice = state.documents.some(doc =>
       doc.clientId === client.id &&
@@ -1011,8 +1136,8 @@ function runMonthlyGenerationIfNeeded() {
         date: docDate,
         dueDate,
         period,
-        amount: rentAmount,
-        charges: 0,
+        amount: rentAmount + chargesAmount,
+        charges: chargesAmount,
         vatRate: 0,
         status: 'unpaid',
         notes: '',
@@ -1028,8 +1153,8 @@ function runMonthlyGenerationIfNeeded() {
         date: docDate,
         dueDate,
         period,
-        amount: rentAmount,
-        charges: 0,
+        amount: rentAmount + chargesAmount,
+        charges: chargesAmount,
         vatRate: 0,
         status: 'paid',
         notes: '',
@@ -1077,7 +1202,6 @@ async function downloadCurrentPdf() {
 
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-
     const margin = 10;
     const usableWidth = pageWidth - margin * 2;
     const usableHeight = pageHeight - margin * 2;
@@ -1178,20 +1302,31 @@ function bindEvents() {
 
   byId('clientForm')?.addEventListener('submit', e => {
     e.preventDefault();
-    const fd = new FormData(e.target);
+    const form = e.target;
+    const fd = new FormData(form);
     const item = Object.fromEntries(fd.entries());
 
-    const payload = {
+    const payload = normalizeClient({
       id: item.id || uid('client'),
-      name: item.name.trim(),
-      email: item.email.trim(),
-      phone: item.phone.trim(),
-      property: item.property.trim(),
+      name: String(item.name || '').trim(),
+      email: String(item.email || '').trim(),
+      phone: String(item.phone || '').trim(),
+      property: String(item.property || '').trim(),
       rentAmount: item.rentAmount ? Number(item.rentAmount) : 0,
+      chargesAmount: item.chargesAmount ? Number(item.chargesAmount) : 0,
       dueDay: item.dueDay ? Number(item.dueDay) : '',
-      address: item.address.trim(),
-      notes: item.notes.trim(),
-    };
+      address: String(item.address || '').trim(),
+      notes: String(item.notes || '').trim(),
+      leaseStartDate: String(item.leaseStartDate || '').trim(),
+      leaseEndDate: String(item.leaseEndDate || '').trim(),
+      securityDeposit: item.securityDeposit ? Number(item.securityDeposit) : 0,
+      paymentMethod: String(item.paymentMethod || '').trim(),
+      paymentFrequency: String(item.paymentFrequency || 'mensuel').trim(),
+      tenantStatus: String(item.tenantStatus || 'actif').trim(),
+      guarantorName: String(item.guarantorName || '').trim(),
+      guarantorPhone: String(item.guarantorPhone || '').trim(),
+      guarantorEmail: String(item.guarantorEmail || '').trim(),
+    });
 
     const index = state.clients.findIndex(c => c.id === payload.id);
     if (index >= 0) state.clients[index] = payload;
@@ -1208,20 +1343,20 @@ function bindEvents() {
 
     if (!item.clientId) return alert('Sélectionnez un client.');
 
-    const payload = {
+    const payload = normalizeDocument({
       id: item.id || uid('doc'),
       type: item.type,
       clientId: item.clientId,
-      number: item.number.trim(),
+      number: String(item.number || '').trim(),
       date: item.date,
       dueDate: item.dueDate || getNextMonthFifth(),
-      period: item.period.trim(),
+      period: String(item.period || '').trim(),
       amount: Number(item.amount || 0),
       charges: Number(item.charges || 0),
       vatRate: Number(item.vatRate || 0),
       status: item.status,
-      notes: item.notes.trim(),
-    };
+      notes: String(item.notes || '').trim(),
+    });
 
     const index = state.documents.findIndex(d => d.id === payload.id);
     if (index >= 0) state.documents[index] = payload;

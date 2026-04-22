@@ -1,391 +1,938 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SCI de l’Espérance — Gestion</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div>
-        <div class="brand">SCI de l’Espérance</div>
-        <div class="brand-sub">Gestion clients, factures, quittances & relances</div>
-      </div>
+:root {
+  --bg: #0f172a;
+  --panel: #111827;
+  --panel-2: #ffffff;
+  --muted: #64748b;
+  --line: #e5e7eb;
+  --text: #0f172a;
+  --text-light: #f8fafc;
+  --primary: #0ea5e9;
+  --primary-dark: #0284c7;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  --radius: 18px;
+  --receipt-blue: #244f87;
+  --receipt-blue-soft: #eaf2fb;
+}
 
-      <nav class="nav">
-        <button class="nav-btn active" data-view="dashboard">Tableau de bord</button>
-        <button class="nav-btn" data-view="clients">Clients</button>
-        <button class="nav-btn" data-view="documents">Documents</button>
-        <button class="nav-btn" data-view="relances">Relances</button>
-        <button class="nav-btn" data-view="settings">Paramètres</button>
-      </nav>
+* {
+  box-sizing: border-box;
+}
 
-      <div class="sidebar-footer">
-        <button id="exportBtn" class="secondary-btn full">Exporter les données</button>
-        <label class="secondary-btn full import-label">
-          Importer les données
-          <input id="importInput" type="file" accept="application/json" hidden />
-        </label>
-      </div>
-    </aside>
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f8fafc;
+  color: var(--text);
+}
 
-    <main class="main">
-      <header class="topbar">
-        <div>
-          <h1 id="pageTitle">Tableau de bord</h1>
-          <p id="pageSubtitle">Vue rapide de votre activité</p>
-        </div>
-        <button id="quickAddClient" class="primary-btn">+ Nouveau client</button>
-      </header>
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
 
-      <!-- DASHBOARD -->
-      <section id="dashboardView" class="view active">
-        <div class="stats-grid">
-          <article class="stat-card">
-            <span>Clients</span>
-            <strong id="statClients">0</strong>
-          </article>
-          <article class="stat-card">
-            <span>Documents</span>
-            <strong id="statDocuments">0</strong>
-          </article>
-          <article class="stat-card">
-            <span>Montant payé</span>
-            <strong id="statPaid">0 €</strong>
-          </article>
-          <article class="stat-card">
-            <span>Montant impayé</span>
-            <strong id="statUnpaid">0 €</strong>
-          </article>
-        </div>
+.app-shell {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  min-height: 100vh;
+}
 
-        <div class="panel-grid">
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Documents récents</h2>
-            </div>
-            <div id="recentDocuments" class="list"></div>
-          </section>
+.sidebar {
+  background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+  color: var(--text-light);
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+}
 
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Raccourcis</h2>
-            </div>
-            <div class="shortcut-grid">
-              <button class="shortcut" id="newInvoiceShortcut">Créer une facture</button>
-              <button class="shortcut" id="newReceiptShortcut">Créer une quittance</button>
-              <button class="shortcut" id="goClientsShortcut">Voir les clients</button>
-            </div>
-          </section>
-        </div>
+.brand {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
 
-        <!-- NOUVELLE ZONE A ENCAISSER -->
-        <section id="encaissementPanel" class="panel">
-          <div class="panel-head">
-            <h2>À encaisser</h2>
-          </div>
-          <div id="encaissementTableWrap" class="table-wrap">
-            <div class="empty">Aucun montant à encaisser.</div>
-          </div>
-        </section>
-      </section>
+.brand-sub {
+  color: #cbd5e1;
+  margin-top: 6px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
 
-      <!-- CLIENTS -->
-      <section id="clientsView" class="view">
-        <div class="panel">
-          <div class="panel-head panel-head-space">
-            <h2>Clients</h2>
-            <button id="addClientBtn" class="primary-btn">+ Ajouter un client</button>
-          </div>
-          <div class="toolbar">
-            <input id="clientSearch" type="search" placeholder="Rechercher un client..." />
-          </div>
-          <div id="clientsTableWrap" class="table-wrap"></div>
-        </div>
-      </section>
+.nav {
+  display: grid;
+  gap: 10px;
+}
 
-      <!-- DOCUMENTS -->
-      <section id="documentsView" class="view">
-        <div class="panel">
-          <div class="panel-head panel-head-space">
-            <h2>Factures & quittances</h2>
-            <div class="action-row">
-              <button id="addInvoiceBtn" class="primary-btn">+ Facture</button>
-              <button id="addReceiptBtn" class="secondary-btn">+ Quittance</button>
-            </div>
-          </div>
+.nav-btn {
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-light);
+  padding: 14px 16px;
+  border-radius: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
 
-          <div class="toolbar toolbar-double">
-            <input id="documentSearch" type="search" placeholder="Rechercher un document..." />
-            <select id="documentFilter">
-              <option value="all">Tous</option>
-              <option value="facture">Factures</option>
-              <option value="quittance">Quittances</option>
-              <option value="paid">Payés</option>
-              <option value="unpaid">Impayés</option>
-            </select>
-          </div>
+.nav-btn.active,
+.nav-btn:hover {
+  background: rgba(14, 165, 233, 0.18);
+}
 
-          <div id="documentsTableWrap" class="table-wrap"></div>
-        </div>
-      </section>
+.sidebar-footer {
+  display: grid;
+  gap: 10px;
+}
 
-      <!-- RELANCES -->
-      <section id="relancesView" class="view">
-        <div class="panel">
-          <div class="panel-head panel-head-space">
-            <h2>Relances</h2>
-            <div class="action-row">
-              <button id="firstReminderBtn" class="secondary-btn">1ère relance</button>
-              <button id="secondReminderBtn" class="secondary-btn">2ème relance</button>
-              <button id="formalNoticeBtn" class="primary-btn">Mise en demeure</button>
-            </div>
-          </div>
+.main {
+  padding: 28px;
+}
 
-          <div class="toolbar toolbar-double">
-            <input id="reminderSearch" type="search" placeholder="Rechercher un client ou document..." />
-            <select id="reminderFilter">
-              <option value="all">Toutes</option>
-              <option value="first">1ère relance</option>
-              <option value="second">2ème relance</option>
-              <option value="formal">Mise en demeure</option>
-            </select>
-          </div>
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 24px;
+}
 
-          <div id="remindersTableWrap" class="table-wrap"></div>
-        </div>
-      </section>
+.topbar h1 {
+  margin: 0 0 6px;
+  font-size: 2rem;
+}
 
-      <!-- SETTINGS -->
-      <section id="settingsView" class="view">
-        <div class="panel narrow">
-          <div class="panel-head">
-            <h2>Paramètres société</h2>
-          </div>
+.topbar p {
+  margin: 0;
+  color: var(--muted);
+}
 
-          <form id="settingsForm" class="form-grid">
-            <label>
-              Nom de la société
-              <input name="companyName" type="text" />
-            </label>
+.view {
+  display: none;
+}
 
-            <label>
-              Gérant / contact
-              <input name="managerName" type="text" />
-            </label>
+.view.active {
+  display: block;
+}
 
-            <label>
-              Email
-              <input name="email" type="email" />
-            </label>
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
 
-            <label>
-              Téléphone
-              <input name="phone" type="text" />
-            </label>
+.stat-card,
+.panel {
+  background: #fff;
+  border: 1px solid #edf2f7;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
 
-            <label class="full-span">
-              Adresse
-              <input name="address" type="text" />
-            </label>
+.stat-card {
+  padding: 20px;
+}
 
-            <label>
-              Ville
-              <input name="city" type="text" />
-            </label>
+.stat-card span {
+  color: var(--muted);
+  display: block;
+  margin-bottom: 12px;
+}
 
-            <label>
-              Code postal
-              <input name="postalCode" type="text" />
-            </label>
+.stat-card strong {
+  font-size: 1.8rem;
+}
 
-            <label>
-              SIRET
-              <input name="siret" type="text" />
-            </label>
+.panel {
+  padding: 20px;
+}
 
-            <label>
-              IBAN
-              <input name="iban" type="text" />
-            </label>
+.panel-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 0.9fr;
+  gap: 16px;
+}
 
-            <label>
-              Devise
-              <input name="currency" type="text" value="EUR" />
-            </label>
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
 
-            <label class="full-span">
-              Mention libre
-              <textarea name="legalNote" rows="4" placeholder="Exemple : règlement à réception, merci de préciser la référence du document."></textarea>
-            </label>
+.panel-head-space {
+  gap: 12px;
+  flex-wrap: wrap;
+}
 
-            <div class="full-span">
-              <button type="submit" class="primary-btn">Enregistrer</button>
-            </div>
-          </form>
-        </div>
-      </section>
-    </main>
-  </div>
+.panel h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
 
-  <!-- MODAL CLIENT -->
-  <dialog id="clientDialog" class="modal">
-    <form method="dialog" id="clientForm" class="modal-card">
-      <div class="modal-head">
-        <h3 id="clientModalTitle">Nouveau client</h3>
-        <button type="button" class="icon-btn" data-close="clientDialog">×</button>
-      </div>
+.list {
+  display: grid;
+  gap: 10px;
+}
 
-      <input type="hidden" name="id" />
+.list-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  background: #fff;
+}
 
-      <div class="form-grid">
-        <label>
-          Nom complet
-          <input name="name" type="text" required />
-        </label>
+.list-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
 
-        <label>
-          Email
-          <input name="email" type="email" />
-        </label>
+.list-item small {
+  color: var(--muted);
+}
 
-        <label>
-          Téléphone
-          <input name="phone" type="text" />
-        </label>
+.shortcut-grid {
+  display: grid;
+  gap: 10px;
+}
 
-        <label>
-          Bien / appartement
-          <input name="property" type="text" />
-        </label>
+.shortcut {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: 0.2s ease;
+}
 
-        <label>
-          Loyer mensuel (€)
-          <input name="rentAmount" type="number" step="0.01" min="0" />
-        </label>
+.shortcut:hover {
+  border-color: var(--primary);
+}
 
-        <label>
-          Jour d’échéance
-          <input name="dueDay" type="number" min="1" max="31" />
-        </label>
+.primary-btn,
+.secondary-btn {
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
 
-        <label class="full-span">
-          Adresse
-          <input name="address" type="text" />
-        </label>
+.primary-btn {
+  background: var(--primary);
+  color: white;
+}
 
-        <label class="full-span">
-          Notes
-          <textarea name="notes" rows="3"></textarea>
-        </label>
-      </div>
+.primary-btn:hover {
+  background: var(--primary-dark);
+}
 
-      <div class="modal-actions">
-        <button type="button" class="secondary-btn" data-close="clientDialog">Annuler</button>
-        <button type="submit" class="primary-btn">Enregistrer</button>
-      </div>
-    </form>
-  </dialog>
+.secondary-btn {
+  background: #e2e8f0;
+  color: #0f172a;
+}
 
-  <!-- MODAL DOCUMENT -->
-  <dialog id="documentDialog" class="modal">
-    <form method="dialog" id="documentForm" class="modal-card">
-      <div class="modal-head">
-        <h3 id="documentModalTitle">Nouveau document</h3>
-        <button type="button" class="icon-btn" data-close="documentDialog">×</button>
-      </div>
+.full {
+  width: 100%;
+}
 
-      <input type="hidden" name="id" />
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 
-      <div class="form-grid">
-        <label>
-          Type
-          <select name="type" required>
-            <option value="facture">Facture</option>
-            <option value="quittance">Quittance</option>
-          </select>
-        </label>
+.toolbar-double > * {
+  flex: 1;
+}
 
-        <label>
-          Client
-          <select name="clientId" required></select>
-        </label>
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: white;
+}
 
-        <label>
-          Numéro
-          <input name="number" type="text" required />
-        </label>
+.table-wrap {
+  overflow: auto;
+}
 
-        <label>
-          Date
-          <input name="date" type="date" required />
-        </label>
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
 
-        <label>
-          Échéance
-          <input name="dueDate" type="date" />
-        </label>
+th,
+td {
+  padding: 14px 10px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  vertical-align: top;
+}
 
-        <label>
-          Période / objet
-          <input name="period" type="text" placeholder="Ex : Loyer avril 2026" required />
-        </label>
+th {
+  color: var(--muted);
+  font-weight: 600;
+}
 
-        <label>
-          Montant (€)
-          <input name="amount" type="number" step="0.01" min="0" required />
-        </label>
+.tag {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
 
-        <label>
-          Charges (€)
-          <input name="charges" type="number" step="0.01" min="0" value="0" />
-        </label>
+.tag.paid {
+  background: #dcfce7;
+  color: #166534;
+}
 
-        <label>
-          TVA (%)
-          <input name="vatRate" type="number" step="0.01" min="0" value="0" />
-        </label>
+.tag.unpaid {
+  background: #fee2e2;
+  color: #991b1b;
+}
 
-        <label>
-          Statut
-          <select name="status" required>
-            <option value="paid">Payé</option>
-            <option value="unpaid">Impayé</option>
-          </select>
-        </label>
+.tag.facture {
+  background: #e0f2fe;
+  color: #075985;
+}
 
-        <label class="full-span">
-          Notes
-          <textarea name="notes" rows="3"></textarea>
-        </label>
-      </div>
+.tag.quittance {
+  background: #ede9fe;
+  color: #5b21b6;
+}
 
-      <div class="modal-actions">
-        <button type="button" class="secondary-btn" data-close="documentDialog">Annuler</button>
-        <button type="submit" class="primary-btn">Enregistrer</button>
-      </div>
-    </form>
-  </dialog>
+.tag.relance {
+  background: #fef3c7;
+  color: #92400e;
+}
 
-  <!-- MODAL PRINT / PDF -->
-  <dialog id="printDialog" class="modal print-modal">
-    <div class="modal-card print-card">
-      <div class="modal-head no-print">
-        <h3>Aperçu du document</h3>
-        <div class="action-row">
-          <button id="downloadPdfBtn" class="secondary-btn">Télécharger PDF</button>
-          <button id="printNowBtn" class="primary-btn">Imprimer / PDF</button>
-          <button type="button" class="icon-btn" data-close="printDialog">×</button>
-        </div>
-      </div>
-      <div id="printArea" class="document-preview"></div>
-    </div>
-  </dialog>
+.tag.mise-en-demeure {
+  background: #fee2e2;
+  color: #991b1b;
+}
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="app.js"></script>
-</body>
-</html>
+.tag.today {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.tag.soon {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.tag.future {
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.tag.late-soft {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.link-btn,
+.danger-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.link-btn {
+  color: var(--primary-dark);
+}
+
+.danger-link {
+  color: var(--danger);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
+.narrow {
+  max-width: 980px;
+}
+
+.modal {
+  border: 0;
+  border-radius: 22px;
+  padding: 0;
+  width: min(900px, calc(100vw - 30px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  box-shadow: 0 30px 100px rgba(2, 6, 23, 0.28);
+}
+
+.modal::backdrop {
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.modal-card {
+  padding: 22px;
+  background: white;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.modal-head h3 {
+  margin: 0;
+}
+
+.icon-btn {
+  border: 0;
+  background: #e2e8f0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1.4rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.document-preview {
+  padding: 28px;
+  background: white;
+}
+
+.doc-sheet {
+  max-width: 820px;
+  margin: 0 auto;
+  background: white;
+  color: #111827;
+}
+
+.empty {
+  padding: 22px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* tableau à encaisser */
+#encaissementPanel {
+  margin-top: 18px;
+}
+
+.encaissement-late td:first-child {
+  border-left: 4px solid #dc2626;
+}
+
+.encaissement-today td:first-child {
+  border-left: 4px solid #f59e0b;
+}
+
+.encaissement-future td:first-child {
+  border-left: 4px solid #cbd5e1;
+}
+
+.encaissement-amount {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.encaissement-sub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* menu actions */
+.action-menu {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.menu-btn {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: #334155;
+  padding: 4px 8px;
+  border-radius: 10px;
+}
+
+.menu-btn:hover {
+  background: #f1f5f9;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 34px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  min-width: 180px;
+  z-index: 50;
+  padding: 6px;
+}
+
+.dropdown-menu.active {
+  display: block;
+}
+
+.dropdown-menu button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.dropdown-menu button:hover {
+  background: #f8fafc;
+}
+
+.dropdown-menu button.danger {
+  color: #dc2626;
+}
+
+/* Badge statut */
+.doc-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 12px auto;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  border: 2px solid;
+}
+
+.paid-badge {
+  color: #16a34a;
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.unpaid-badge {
+  color: #dc2626;
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* Facture */
+.apple-doc {
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  background: #fff;
+  color: #000;
+  padding: 8px 0 0;
+  font-family: Arial, sans-serif;
+  height: 1122px;
+  display: grid;
+  grid-template-rows: auto auto auto auto 1fr auto;
+}
+
+.apple-doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.apple-doc-company h2 {
+  margin: 0 0 16px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.apple-doc-company p,
+.apple-doc-meta p,
+.apple-doc-client p,
+.apple-doc-conditions p,
+.apple-doc-footer {
+  margin: 0 0 10px;
+  line-height: 1.45;
+  font-size: 14px;
+}
+
+.apple-doc-meta {
+  text-align: right;
+}
+
+.apple-doc-meta h1 {
+  margin: 0 0 16px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.apple-doc-client {
+  margin-bottom: 28px;
+}
+
+.apple-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.apple-doc-table th,
+.apple-doc-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #d9d9d9;
+  text-align: left;
+  font-size: 14px;
+}
+
+.apple-doc-table th {
+  border-bottom: 2px solid #000;
+  color: #000;
+  font-weight: 700;
+}
+
+.apple-doc-total {
+  margin-top: 24px;
+  text-align: right;
+}
+
+.apple-doc-total p {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.apple-doc-total h2 {
+  margin: 10px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.apple-doc-conditions {
+  margin-top: 40px;
+  font-size: 14px;
+}
+
+.apple-doc-signature-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+}
+
+.invoice-signature-row {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  padding-right: 28px;
+}
+
+.invoice-stamp {
+  max-width: 340px;
+  max-height: 150px;
+  object-fit: contain;
+}
+
+.apple-doc-footer {
+  align-self: end;
+  margin-top: 0;
+  padding-top: 20px;
+  padding-bottom: 6px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* Quittance */
+.receipt-doc {
+  min-height: 1122px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 8px;
+  color: #16324f;
+}
+
+.receipt-top-bar {
+  height: 12px;
+  background: var(--receipt-blue);
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 26px;
+}
+
+.receipt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 28px;
+  margin-bottom: 26px;
+}
+
+.receipt-company-block {
+  flex: 1;
+}
+
+.receipt-company-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--receipt-blue);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.receipt-company-lines {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #36526f;
+}
+
+.receipt-title-block {
+  min-width: 280px;
+  text-align: right;
+}
+
+.receipt-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--receipt-blue);
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+
+.receipt-meta-line {
+  font-size: 13px;
+  color: #36526f;
+  margin-bottom: 6px;
+}
+
+.receipt-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.receipt-card {
+  border: 1px solid #dce7f5;
+  background: #f8fbff;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.receipt-card-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--receipt-blue);
+  margin-bottom: 10px;
+}
+
+.receipt-card-body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f3b57;
+}
+
+.receipt-highlight {
+  display: none;
+}
+
+.receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0;
+  margin-bottom: 20px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid #dce7f5;
+}
+
+.receipt-table thead th {
+  background: var(--receipt-blue);
+  color: #fff;
+  border-bottom: none;
+  font-size: 13px;
+  padding: 14px 16px;
+}
+
+.receipt-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5edf8;
+  font-size: 14px;
+  color: #1f3b57;
+}
+
+.receipt-total-row td {
+  font-weight: 800;
+  color: var(--receipt-blue);
+  background: #f8fbff;
+}
+
+.receipt-note {
+  font-size: 13px;
+  color: #48637e;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.receipt-extra-note {
+  margin-top: 16px;
+  font-size: 13px;
+  color: #48637e;
+  line-height: 1.5;
+}
+
+.receipt-signature-row {
+  justify-content: flex-end;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  padding-right: 20px;
+}
+
+.receipt-stamp {
+  max-width: 330px;
+  max-height: 145px;
+  object-fit: contain;
+}
+
+.receipt-footer {
+  margin-top: auto;
+  padding-top: 24px;
+  text-align: center;
+}
+
+/* Relances */
+.reminder-level-1 td:first-child {
+  border-left: 4px solid #f59e0b;
+}
+
+.reminder-level-2 td:first-child {
+  border-left: 4px solid #f97316;
+}
+
+.reminder-level-3 td:first-child {
+  border-left: 4px solid #dc2626;
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-bottom-left-radius: 24px;
+    border-bottom-right-radius: 24px;
+  }
+
+  .stats-grid,
+  .panel-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .apple-doc-header,
+  .receipt-header,
+  .receipt-card-grid {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .apple-doc-meta,
+  .receipt-title-block {
+    text-align: left;
+  }
+
+  .receipt-signature-row,
+  .invoice-signature-row {
+    justify-content: flex-start;
+    padding-right: 0;
+  }
+
+  .doc-status-badge {
+    margin-left: 0;
+    margin-right: auto;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  #printArea,
+  #printArea * {
+    visibility: visible !important;
+  }
+
+  #printArea {
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    background: white;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .doc-sheet,
+  .apple-doc,
+  .receipt-doc {
+    max-width: none;
+  }
+}

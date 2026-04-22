@@ -120,6 +120,71 @@ function setView(view) {
   byId('pageSubtitle').textContent = titles[view][1];
 }
 
+function getOverdueDays(doc) {
+  if (doc.status !== 'unpaid') return 0;
+  const refDate = doc.dueDate || doc.date;
+  if (!refDate) return 0;
+  const due = new Date(refDate + 'T00:00:00');
+  const today = new Date();
+  due.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today - due) / (1000 * 60 * 60 * 24));
+  return diff > 0 ? diff : 0;
+}
+
+function getDaysUntilDue(doc) {
+  if (doc.status === 'paid') return null;
+  const refDate = doc.dueDate || doc.date;
+  if (!refDate) return null;
+  const due = new Date(refDate + 'T00:00:00');
+  const today = new Date();
+  due.setHours(0, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+  return Math.floor((due - today) / (1000 * 60 * 60 * 24));
+}
+
+function getReminderLevel(doc) {
+  const overdueDays = getOverdueDays(doc);
+  if (overdueDays >= 30) return 3;
+  if (overdueDays >= 15) return 2;
+  if (overdueDays >= 1) return 1;
+  return 1;
+}
+
+function getReminderLabel(level) {
+  if (level === 1) return 'Première relance';
+  if (level === 2) return 'Deuxième relance';
+  return 'Mise en demeure';
+}
+
+function getStatusBadge(status) {
+  if (status === 'paid') {
+    return `<div class="doc-status-badge paid-badge">PAYÉ</div>`;
+  }
+  return `<div class="doc-status-badge unpaid-badge">IMPAYÉ</div>`;
+}
+
+function getDueBadgeHtml(doc) {
+  if (doc.status === 'paid') {
+    return `<span class="tag paid">Réglé</span>`;
+  }
+
+  const overdueDays = getOverdueDays(doc);
+  if (overdueDays > 0) {
+    return `<span class="tag unpaid">Retard ${overdueDays} j</span>`;
+  }
+
+  const daysUntilDue = getDaysUntilDue(doc);
+  if (daysUntilDue === 0) {
+    return `<span class="tag facture">Aujourd’hui</span>`;
+  }
+  if (daysUntilDue !== null && daysUntilDue > 0) {
+    return `<span class="tag quittance">Dans ${daysUntilDue} j</span>`;
+  }
+
+  return `<span class="tag facture">À venir</span>`;
+}
+
 function renderStats() {
   const paidTotal = state.documents
     .filter(d => d.status === 'paid' && (d.type === 'facture' || d.type === 'quittance'))
@@ -161,6 +226,96 @@ function renderRecentDocuments() {
       </div>
     `;
   }).join('');
+}
+
+function ensureEncaissementPanel() {
+  const dashboardView = byId('dashboardView');
+  if (!dashboardView) return;
+
+  let panel = byId('encaissementPanel');
+  if (panel) return;
+
+  panel = document.createElement('section');
+  panel.className = 'panel';
+  panel.id = 'encaissementPanel';
+  panel.innerHTML = `
+    <div class="panel-head">
+      <h2>Tableau à encaisser</h2>
+    </div>
+    <div id="encaissementTableWrap" class="table-wrap"></div>
+  `;
+
+  dashboardView.appendChild(panel);
+}
+
+function renderEncaissements() {
+  ensureEncaissementPanel();
+
+  const wrap = byId('encaissementTableWrap');
+  if (!wrap) return;
+
+  const docs = [...state.documents]
+    .filter(doc => doc.type === 'facture' && doc.status === 'unpaid')
+    .sort((a, b) => {
+      const aDate = new Date((a.dueDate || a.date) + 'T00:00:00');
+      const bDate = new Date((b.dueDate || b.date) + 'T00:00:00');
+      return aDate - bDate;
+    });
+
+  if (!docs.length) {
+    wrap.innerHTML = '<div class="empty">Aucun montant à encaisser.</div>';
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>Document</th>
+          <th>Échéance</th>
+          <th>Suivi</th>
+          <th>Montant</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${docs.map(doc => {
+          const client = state.clients.find(c => c.id === doc.clientId);
+          const overdueDays = getOverdueDays(doc);
+          const dueInfo = overdueDays > 0
+            ? `${overdueDays} jour(s) de retard`
+            : (getDaysUntilDue(doc) === 0 ? 'Échéance aujourd’hui' : `Échéance dans ${getDaysUntilDue(doc)} jour(s)`);
+
+          return `
+            <tr>
+              <td>
+                <strong>${escapeHtml(client?.name || 'Client supprimé')}</strong><br>
+                <small>${escapeHtml(client?.property || '')}</small>
+              </td>
+              <td>
+                <strong>${escapeHtml(doc.number)}</strong><br>
+                <small>${escapeHtml(doc.period)}</small>
+              </td>
+              <td>${formatDate(doc.dueDate || doc.date)}</td>
+              <td>
+                ${getDueBadgeHtml(doc)}<br>
+                <small>${escapeHtml(dueInfo)}</small>
+              </td>
+              <td>${formatMoney(doc.amount)}</td>
+              <td>
+                <div class="action-row">
+                  <button class="link-btn" onclick="toggleStatus('${doc.id}')">Marquer payé</button>
+                  <button class="link-btn" onclick="previewDocument('${doc.id}')">Voir</button>
+                  <button class="link-btn" onclick="duplicateDocument('${doc.id}')">Dupliquer</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 function renderClients() {
@@ -241,6 +396,8 @@ function renderDocuments() {
           <th>Client</th>
           <th>Période</th>
           <th>Date</th>
+          <th>Échéance</th>
+          <th>Suivi</th>
           <th>Montant</th>
           <th>Statut</th>
           <th>Actions</th>
@@ -256,12 +413,15 @@ function renderDocuments() {
               <td>${escapeHtml(client?.name || 'Client supprimé')}</td>
               <td>${escapeHtml(doc.period)}</td>
               <td>${formatDate(doc.date)}</td>
+              <td>${formatDate(doc.dueDate || doc.date)}</td>
+              <td>${getDueBadgeHtml(doc)}</td>
               <td>${formatMoney(doc.amount)}</td>
               <td><span class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</span></td>
               <td>
                 <div class="action-row">
                   <button class="link-btn" onclick="previewDocument('${doc.id}')">Voir</button>
                   <button class="link-btn" onclick="toggleStatus('${doc.id}')">${doc.status === 'paid' ? 'Mettre impayé' : 'Mettre payé'}</button>
+                  <button class="link-btn" onclick="duplicateDocument('${doc.id}')">Dupliquer</button>
                   <button class="link-btn" onclick="editDocument('${doc.id}')">Modifier</button>
                   <button class="danger-link" onclick="deleteDocument('${doc.id}')">Supprimer</button>
                 </div>
@@ -352,6 +512,7 @@ function renderSettings() {
 function refreshAll() {
   renderStats();
   renderRecentDocuments();
+  renderEncaissements();
   renderClients();
   renderDocuments();
   renderReminders();
@@ -421,39 +582,6 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   }
 
   dialog.showModal();
-}
-
-function getOverdueDays(doc) {
-  if (doc.status !== 'unpaid') return 0;
-  const refDate = doc.dueDate || doc.date;
-  if (!refDate) return 0;
-  const due = new Date(refDate + 'T00:00:00');
-  const today = new Date();
-  due.setHours(0, 0, 0, 0);
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.floor((today - due) / (1000 * 60 * 60 * 24));
-  return diff > 0 ? diff : 0;
-}
-
-function getReminderLevel(doc) {
-  const overdueDays = getOverdueDays(doc);
-  if (overdueDays >= 30) return 3;
-  if (overdueDays >= 15) return 2;
-  if (overdueDays >= 1) return 1;
-  return 1;
-}
-
-function getReminderLabel(level) {
-  if (level === 1) return 'Première relance';
-  if (level === 2) return 'Deuxième relance';
-  return 'Mise en demeure';
-}
-
-function getStatusBadge(status) {
-  if (status === 'paid') {
-    return `<div class="doc-status-badge paid-badge">PAYÉ</div>`;
-  }
-  return `<div class="doc-status-badge unpaid-badge">IMPAYÉ</div>`;
 }
 
 function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc) {
@@ -818,6 +946,23 @@ window.toggleStatus = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (!doc) return;
   doc.status = doc.status === 'paid' ? 'unpaid' : 'paid';
+  refreshAll();
+};
+
+window.duplicateDocument = function(id) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+
+  const duplicated = {
+    ...doc,
+    id: uid('doc'),
+    number: nextDocumentNumber(doc.type),
+    date: new Date().toISOString().slice(0, 10),
+    dueDate: doc.type === 'facture' ? getNextMonthFifth() : (doc.dueDate || getNextMonthFifth()),
+    status: doc.type === 'quittance' ? 'paid' : 'unpaid',
+  };
+
+  state.documents.push(duplicated);
   refreshAll();
 };
 

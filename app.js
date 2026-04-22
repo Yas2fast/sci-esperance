@@ -260,7 +260,7 @@ function renderReminders() {
   if (!wrap) return;
 
   const query = (byId('reminderSearch')?.value || '').trim().toLowerCase();
-  const filter = byId('reminderFilter')?.value || 'all';
+  const filter = (byId('reminderFilter')?.value || 'all');
 
   const docs = [...state.documents]
     .filter(doc => doc.type === 'facture' && doc.status === 'unpaid')
@@ -302,7 +302,7 @@ function renderReminders() {
           const level = getReminderLevel(doc);
           const overdueDays = getOverdueDays(doc);
           const levelLabel = level === 1 ? '1ère relance' : level === 2 ? '2ème relance' : 'Mise en demeure';
-          const tagClass = level === 1 ? 'relance' : level === 2 ? 'relance' : 'mise-en-demeure';
+          const tagClass = level === 1 ? 'relance' : 'mise-en-demeure';
 
           return `
             <tr class="reminder-level-${level}">
@@ -430,6 +430,13 @@ function getReminderLabel(level) {
   return 'Mise en demeure';
 }
 
+function getStatusBadge(status) {
+  if (status === 'paid') {
+    return `<div class="doc-status-badge paid-badge">PAYÉ</div>`;
+  }
+  return `<div class="doc-status-badge unpaid-badge">IMPAYÉ</div>`;
+}
+
 function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc) {
   return `
     <div class="doc-sheet apple-doc invoice-doc">
@@ -440,6 +447,7 @@ function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOn
           ${s.siret ? `<p>SIRET : ${escapeHtml(s.siret)}</p>` : ''}
         </div>
         <div class="apple-doc-meta">
+          ${getStatusBadge(doc.status)}
           <h1>FACTURE</h1>
           <p><strong>N° :</strong> ${escapeHtml(doc.number)}</p>
           <p><strong>Date :</strong> ${formatDate(doc.date)}</p>
@@ -525,6 +533,7 @@ function createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc) {
         </div>
 
         <div class="receipt-title-block">
+          ${getStatusBadge(doc.status)}
           <div class="receipt-title">QUITTANCE DE LOYER</div>
           <div class="receipt-meta-line"><strong>N° :</strong> ${escapeHtml(doc.number)}</div>
           <div class="receipt-meta-line"><strong>Date :</strong> ${formatDate(doc.date)}</div>
@@ -547,12 +556,6 @@ function createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc) {
             ${escapeHtml(client.property || '—')}
           </div>
         </div>
-      </div>
-
-      <div class="receipt-highlight">
-        Nous reconnaissons avoir reçu de <strong>${escapeHtml(client.name || '')}</strong> la somme de
-        <strong>${formatMoney(totalTtc)}</strong> au titre de la période
-        <strong>${escapeHtml(doc.period || '')}</strong>.
       </div>
 
       <table class="receipt-table">

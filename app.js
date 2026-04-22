@@ -1208,3 +1208,8 @@ function runMonthlyGenerationIfNeeded() {
 bindEvents();
 runMonthlyGenerationIfNeeded();
 refreshAll();
+
+function toggleMenu(id) {
+  const el = document.getElementById(`menu-${id}`);
+  el.classList.toggle('active');
+}

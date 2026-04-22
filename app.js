@@ -21,71 +21,6 @@ const defaultData = {
 
 let state = loadState();
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(defaultData);
-    const parsed = JSON.parse(raw);
-
-    return {
-      settings: { ...defaultData.settings, ...(parsed.settings || {}) },
-      clients: Array.isArray(parsed.clients)
-        ? parsed.clients.map(normalizeClient)
-        : [],
-      documents: Array.isArray(parsed.documents)
-        ? parsed.documents.map(normalizeDocument)
-        : [],
-    };
-  } catch {
-    return structuredClone(defaultData);
-  }
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function normalizeClient(client = {}) {
-  return {
-    id: client.id || uid('client'),
-    name: client.name || '',
-    email: client.email || '',
-    phone: client.phone || '',
-    property: client.property || '',
-    rentAmount: Number(client.rentAmount || 0),
-    chargesAmount: Number(client.chargesAmount || 0),
-    dueDay: client.dueDay ? Number(client.dueDay) : '',
-    address: client.address || '',
-    notes: client.notes || '',
-    leaseStartDate: client.leaseStartDate || '',
-    leaseEndDate: client.leaseEndDate || '',
-    securityDeposit: Number(client.securityDeposit || 0),
-    paymentMethod: client.paymentMethod || '',
-    paymentFrequency: client.paymentFrequency || 'mensuel',
-    tenantStatus: client.tenantStatus || 'actif',
-    guarantorName: client.guarantorName || '',
-    guarantorPhone: client.guarantorPhone || '',
-    guarantorEmail: client.guarantorEmail || '',
-  };
-}
-
-function normalizeDocument(doc = {}) {
-  return {
-    id: doc.id || uid('doc'),
-    type: doc.type || 'facture',
-    clientId: doc.clientId || '',
-    number: doc.number || '',
-    date: doc.date || getTodayIso(),
-    dueDate: doc.dueDate || getNextMonthFifth(),
-    period: doc.period || '',
-    amount: Number(doc.amount || 0),
-    charges: Number(doc.charges || 0),
-    vatRate: Number(doc.vatRate || 0),
-    status: doc.status || 'unpaid',
-    notes: doc.notes || '',
-  };
-}
-
 function uid(prefix = 'id') {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -146,6 +81,124 @@ function getMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function setFormValue(form, field, value) {
+  if (form?.elements?.[field]) {
+    form.elements[field].value = value ?? '';
+  }
+}
+
+function getNumeric(value) {
+  return Number(value || 0);
+}
+
+function getDocumentBreakdown(doc = {}) {
+  const electricity = getNumeric(doc.electricity);
+  const water = getNumeric(doc.water);
+  const charges = getNumeric(doc.charges);
+
+  let rent = getNumeric(doc.rent);
+
+  if (!rent) {
+    const amount = getNumeric(doc.amount);
+    if (amount > 0) {
+      rent = Math.max(0, amount - electricity - water - charges);
+    }
+  }
+
+  const subtotal = rent + electricity + water + charges;
+  const vatRate = getNumeric(doc.vatRate);
+  const vatAmount = subtotal * (vatRate / 100);
+  const totalTtc = subtotal + vatAmount;
+
+  return {
+    rent,
+    electricity,
+    water,
+    charges,
+    subtotal,
+    vatRate,
+    vatAmount,
+    totalTtc,
+  };
+}
+
+function normalizeClient(client = {}) {
+  return {
+    id: client.id || uid('client'),
+    name: client.name || '',
+    email: client.email || '',
+    phone: client.phone || '',
+    property: client.property || '',
+    rentAmount: Number(client.rentAmount || 0),
+    chargesAmount: Number(client.chargesAmount || 0),
+    dueDay: client.dueDay ? Number(client.dueDay) : '',
+    address: client.address || '',
+    notes: client.notes || '',
+    leaseStartDate: client.leaseStartDate || '',
+    leaseEndDate: client.leaseEndDate || '',
+    securityDeposit: Number(client.securityDeposit || 0),
+    paymentMethod: client.paymentMethod || '',
+    paymentFrequency: client.paymentFrequency || 'mensuel',
+    tenantStatus: client.tenantStatus || 'actif',
+    guarantorName: client.guarantorName || '',
+    guarantorPhone: client.guarantorPhone || '',
+    guarantorEmail: client.guarantorEmail || '',
+  };
+}
+
+function normalizeDocument(doc = {}) {
+  const rent = Number(doc.rent || 0);
+  const electricity = Number(doc.electricity || 0);
+  const water = Number(doc.water || 0);
+  const charges = Number(doc.charges || 0);
+
+  let amount = Number(doc.amount || 0);
+  if (!amount) {
+    amount = rent + electricity + water + charges;
+  }
+
+  return {
+    id: doc.id || uid('doc'),
+    type: doc.type || 'facture',
+    clientId: doc.clientId || '',
+    number: doc.number || '',
+    date: doc.date || getTodayIso(),
+    dueDate: doc.dueDate || getNextMonthFifth(),
+    period: doc.period || '',
+    rent,
+    electricity,
+    water,
+    charges,
+    amount,
+    vatRate: Number(doc.vatRate || 0),
+    status: doc.status || 'unpaid',
+    notes: doc.notes || '',
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return structuredClone(defaultData);
+    }
+
+    const parsed = JSON.parse(raw);
+
+    return {
+      settings: { ...defaultData.settings, ...(parsed.settings || {}) },
+      clients: Array.isArray(parsed.clients) ? parsed.clients.map(normalizeClient) : [],
+      documents: Array.isArray(parsed.documents) ? parsed.documents.map(normalizeDocument) : [],
+    };
+  } catch {
+    return structuredClone(defaultData);
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
 function nextDocumentNumber(type) {
   const year = new Date().getFullYear();
   const prefix = type === 'facture' ? 'FAC' : 'QUI';
@@ -182,11 +235,13 @@ function setView(view) {
 
 function getOverdueDays(doc) {
   if (doc.status !== 'unpaid') return 0;
+
   const refDate = doc.dueDate || doc.date;
   if (!refDate) return 0;
 
   const due = new Date(`${refDate}T00:00:00`);
   const today = new Date();
+
   due.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
 
@@ -196,11 +251,13 @@ function getOverdueDays(doc) {
 
 function getDaysUntilDue(doc) {
   if (doc.status === 'paid') return null;
+
   const refDate = doc.dueDate || doc.date;
   if (!refDate) return null;
 
   const due = new Date(`${refDate}T00:00:00`);
   const today = new Date();
+
   due.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
 
@@ -272,15 +329,7 @@ function populateClientOptions(selectedId = '') {
   if (selectedId) {
     select.value = selectedId;
   }
-}
-
-function setFormValue(form, field, value) {
-  if (form?.elements?.[field]) {
-    form.elements[field].value = value ?? '';
-  }
-}
-
-function openClientModal(client = null) {
+}function openClientModal(client = null) {
   const dialog = byId('clientDialog');
   const form = byId('clientForm');
   if (!dialog || !form) return;
@@ -307,9 +356,6 @@ function openClientModal(client = null) {
     'paymentMethod',
     'paymentFrequency',
     'tenantStatus',
-    'guarantorName',
-    'guarantorPhone',
-    'guarantorEmail',
   ].forEach(field => {
     setFormValue(form, field, safeClient[field]);
   });
@@ -329,30 +375,46 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
     ? 'Modifier le document'
     : `Nouvelle ${type === 'facture' ? 'facture' : 'quittance'}`;
 
+  const normalizedDoc = normalizeDocument(doc || { type });
+
   setFormValue(form, 'id', doc?.id || '');
   setFormValue(form, 'type', type);
   populateClientOptions(doc?.clientId || presetClientId);
-  setFormValue(form, 'number', doc?.number || nextDocumentNumber(type));
-  setFormValue(form, 'date', doc?.date || getTodayIso());
-  setFormValue(form, 'dueDate', doc?.dueDate || getNextMonthFifth());
-  setFormValue(form, 'period', doc?.period || '');
-  setFormValue(form, 'amount', doc?.amount || '');
-  setFormValue(form, 'charges', doc?.charges || 0);
-  setFormValue(form, 'vatRate', doc?.vatRate ?? 0);
-  setFormValue(form, 'status', doc?.status || (type === 'quittance' ? 'paid' : 'unpaid'));
-  setFormValue(form, 'notes', doc?.notes || '');
+  setFormValue(form, 'number', normalizedDoc.number || nextDocumentNumber(type));
+  setFormValue(form, 'date', normalizedDoc.date || getTodayIso());
+  setFormValue(form, 'dueDate', normalizedDoc.dueDate || getNextMonthFifth());
+  setFormValue(form, 'period', normalizedDoc.period || '');
+  setFormValue(form, 'rent', normalizedDoc.rent || '');
+  setFormValue(form, 'electricity', normalizedDoc.electricity || 0);
+  setFormValue(form, 'water', normalizedDoc.water || 0);
+  setFormValue(form, 'charges', normalizedDoc.charges || 0);
+  setFormValue(form, 'vatRate', normalizedDoc.vatRate ?? 0);
+  setFormValue(form, 'status', normalizedDoc.status || (type === 'quittance' ? 'paid' : 'unpaid'));
+  setFormValue(form, 'notes', normalizedDoc.notes || '');
 
   if (!doc && presetClientId) {
     const client = state.clients.find(c => c.id === presetClientId);
-    if (client?.rentAmount) setFormValue(form, 'amount', client.rentAmount);
-    if (form.elements.charges && client?.chargesAmount) setFormValue(form, 'charges', client.chargesAmount);
+    if (client?.rentAmount) setFormValue(form, 'rent', client.rentAmount);
+    if (client?.chargesAmount) setFormValue(form, 'charges', client.chargesAmount);
     setFormValue(form, 'period', getPeriodLabelFromDate(new Date()));
   }
 
   dialog.showModal();
 }
 
-function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc) {
+function createInvoiceHtml(doc, client, s) {
+  const breakdown = getDocumentBreakdown(doc);
+  const {
+    rent,
+    electricity,
+    water,
+    charges,
+    subtotal,
+    vatRate,
+    vatAmount,
+    totalTtc,
+  } = breakdown;
+
   return `
     <div class="doc-sheet apple-doc invoice-doc">
       <div class="apple-doc-header">
@@ -385,9 +447,21 @@ function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOn
         </thead>
         <tbody>
           <tr>
-            <td>${escapeHtml(doc.period || 'Loyer')}</td>
-            <td>${formatMoney(rentOnly)}</td>
+            <td>Loyer</td>
+            <td>${formatMoney(rent)}</td>
           </tr>
+          ${electricity > 0 ? `
+            <tr>
+              <td>Électricité</td>
+              <td>${formatMoney(electricity)}</td>
+            </tr>
+          ` : ''}
+          ${water > 0 ? `
+            <tr>
+              <td>Eau</td>
+              <td>${formatMoney(water)}</td>
+            </tr>
+          ` : ''}
           ${charges > 0 ? `
             <tr>
               <td>Charges</td>
@@ -398,7 +472,7 @@ function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOn
       </table>
 
       <div class="apple-doc-total">
-        <p>Total HT : ${formatMoney(totalAmount)}</p>
+        <p>Total HT : ${formatMoney(subtotal)}</p>
         <p>TVA (${vatRate.toFixed(2).replace('.', ',')}%) : ${formatMoney(vatAmount)}</p>
         <h2>Total TTC : ${formatMoney(totalTtc)}</h2>
       </div>
@@ -424,7 +498,16 @@ function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOn
   `;
 }
 
-function createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc) {
+function createReceiptHtml(doc, client, s) {
+  const breakdown = getDocumentBreakdown(doc);
+  const {
+    rent,
+    electricity,
+    water,
+    charges,
+    totalTtc,
+  } = breakdown;
+
   return `
     <div class="doc-sheet apple-doc receipt-doc">
       <div class="receipt-top-bar"></div>
@@ -475,8 +558,20 @@ function createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc) {
         <tbody>
           <tr>
             <td>Loyer</td>
-            <td>${formatMoney(Math.max(0, totalAmount - charges))}</td>
+            <td>${formatMoney(rent)}</td>
           </tr>
+          ${electricity > 0 ? `
+            <tr>
+              <td>Électricité</td>
+              <td>${formatMoney(electricity)}</td>
+            </tr>
+          ` : ''}
+          ${water > 0 ? `
+            <tr>
+              <td>Eau</td>
+              <td>${formatMoney(water)}</td>
+            </tr>
+          ` : ''}
           ${charges > 0 ? `
             <tr>
               <td>Charges</td>
@@ -512,24 +607,18 @@ function createDocumentHtml(doc) {
   const client = state.clients.find(c => c.id === doc.clientId) || {};
   const s = state.settings;
 
-  const totalAmount = Number(doc.amount || 0);
-  const charges = Number(doc.charges || 0);
-  const vatRate = Number(doc.vatRate || 0);
-  const rentOnly = Math.max(0, totalAmount - charges);
-  const vatAmount = totalAmount * (vatRate / 100);
-  const totalTtc = totalAmount + vatAmount;
-
   if (doc.type === 'quittance') {
-    return createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc);
+    return createReceiptHtml(doc, client, s);
   }
 
-  return createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc);
+  return createInvoiceHtml(doc, client, s);
 }
 
 function createReminderHtml(doc, level) {
   const client = state.clients.find(c => c.id === doc.clientId) || {};
   const overdueDays = getOverdueDays(doc);
   const title = getReminderLabel(level);
+  const breakdown = getDocumentBreakdown(doc);
 
   return `
     <div class="doc-sheet apple-doc">
@@ -555,7 +644,7 @@ function createReminderHtml(doc, level) {
         <p>Madame, Monsieur,</p>
         <p>
           Sauf erreur de notre part, la facture <strong>${escapeHtml(doc.number)}</strong> relative à
-          <strong>${escapeHtml(doc.period)}</strong>, d’un montant de <strong>${formatMoney(doc.amount)}</strong>,
+          <strong>${escapeHtml(doc.period)}</strong>, d’un montant de <strong>${formatMoney(breakdown.totalTtc)}</strong>,
           arrivée à échéance le <strong>${formatDate(doc.dueDate || doc.date)}</strong>, demeure impayée à ce jour.
         </p>
         <p>Le retard constaté est de <strong>${overdueDays} jour(s)</strong>.</p>
@@ -600,9 +689,7 @@ window.toggleMenu = function(id, event) {
   if (!alreadyOpen) {
     menu.classList.add('active');
   }
-};
-
-window.editClient = function(id) {
+};window.editClient = function(id) {
   const client = state.clients.find(c => c.id === id);
   if (client) openClientModal(client);
 };
@@ -641,14 +728,14 @@ window.duplicateDocument = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (!doc) return;
 
-  const duplicated = {
+  const duplicated = normalizeDocument({
     ...doc,
     id: uid('doc'),
     number: nextDocumentNumber(doc.type),
     date: getTodayIso(),
     dueDate: doc.type === 'facture' ? getNextMonthFifth() : (doc.dueDate || getNextMonthFifth()),
     status: doc.type === 'quittance' ? 'paid' : 'unpaid',
-  };
+  });
 
   state.documents.push(duplicated);
   refreshAll();
@@ -671,11 +758,11 @@ window.previewReminder = function(id, level) {
 function renderStats() {
   const paidTotal = state.documents
     .filter(d => d.status === 'paid' && (d.type === 'facture' || d.type === 'quittance'))
-    .reduce((a, b) => a + Number(b.amount || 0), 0);
+    .reduce((a, b) => a + Number(getDocumentBreakdown(b).totalTtc || 0), 0);
 
   const unpaidTotal = state.documents
     .filter(d => d.status === 'unpaid' && (d.type === 'facture' || d.type === 'quittance'))
-    .reduce((a, b) => a + Number(b.amount || 0), 0);
+    .reduce((a, b) => a + Number(getDocumentBreakdown(b).totalTtc || 0), 0);
 
   if (byId('statClients')) byId('statClients').textContent = state.clients.length;
   if (byId('statDocuments')) byId('statDocuments').textContent = state.documents.filter(d => d.type === 'facture' || d.type === 'quittance').length;
@@ -769,10 +856,9 @@ function renderEncaissements() {
           const client = state.clients.find(c => c.id === doc.clientId);
           const overdueDays = getOverdueDays(doc);
           const daysUntilDue = getDaysUntilDue(doc);
-
           const dueInfo = overdueDays > 0
             ? `${overdueDays} jour(s) de retard`
-            : (daysUntilDue === 0 ? 'Échéance aujourd’hui' : `Échéance dans ${daysUntilDue} jour(s)`);
+            : (daysUntilDue === 0 ? 'Échéance aujourd’hui' : `Échéance dans ${daysUntilDue} jour(s)}`);
 
           return `
             <tr>
@@ -789,7 +875,7 @@ function renderEncaissements() {
                 ${getDueBadgeHtml(doc)}<br>
                 <small>${escapeHtml(dueInfo)}</small>
               </td>
-              <td>${formatMoney(doc.amount)}</td>
+              <td>${formatMoney(getDocumentBreakdown(doc).totalTtc)}</td>
               <td>
                 <div class="action-row">
                   <button class="link-btn" type="button" onclick="toggleStatus('${doc.id}')">Marquer payé</button>
@@ -859,9 +945,7 @@ function renderClients() {
               <small>${escapeHtml(client.phone || '')}</small>
               ${client.guarantorName ? `<br><small>Garant : ${escapeHtml(client.guarantorName)}</small>` : ''}
             </td>
-            <td>
-              ${escapeHtml(client.property || '—')}
-            </td>
+            <td>${escapeHtml(client.property || '—')}</td>
             <td>
               ${client.rentAmount ? formatMoney(client.rentAmount) : '—'}
               ${client.chargesAmount ? `<br><small>Charges : ${formatMoney(client.chargesAmount)}</small>` : ''}
@@ -932,6 +1016,7 @@ function renderDocuments() {
       <tbody>
         ${docs.map(doc => {
           const client = state.clients.find(c => c.id === doc.clientId);
+          const totalDisplay = formatMoney(getDocumentBreakdown(doc).totalTtc);
 
           return `
             <tr>
@@ -942,7 +1027,7 @@ function renderDocuments() {
               <td>${formatDate(doc.date)}</td>
               <td>${formatDate(doc.dueDate || doc.date)}</td>
               <td>${getDueBadgeHtml(doc)}</td>
-              <td>${formatMoney(doc.amount)}</td>
+              <td>${totalDisplay}</td>
               <td><span class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</span></td>
               <td style="position: relative;">
                 <div class="action-menu">
@@ -1024,7 +1109,7 @@ function renderReminders() {
               <td>${escapeHtml(client?.name || 'Client supprimé')}</td>
               <td>${formatDate(doc.dueDate || doc.date)}</td>
               <td>${overdueDays > 0 ? `${overdueDays} jour(s)` : '—'}</td>
-              <td>${formatMoney(doc.amount)}</td>
+              <td>${formatMoney(getDocumentBreakdown(doc).totalTtc)}</td>
               <td>
                 <button class="link-btn" type="button" onclick="previewReminder('${doc.id}', ${level})">Voir</button>
               </td>
@@ -1079,12 +1164,8 @@ function importData(e) {
       const parsed = JSON.parse(reader.result);
       state = {
         settings: { ...defaultData.settings, ...(parsed.settings || {}) },
-        clients: Array.isArray(parsed.clients)
-          ? parsed.clients.map(normalizeClient)
-          : [],
-        documents: Array.isArray(parsed.documents)
-          ? parsed.documents.map(normalizeDocument)
-          : [],
+        clients: Array.isArray(parsed.clients) ? parsed.clients.map(normalizeClient) : [],
+        documents: Array.isArray(parsed.documents) ? parsed.documents.map(normalizeDocument) : [],
       };
       refreshAll();
       alert('Données importées.');
@@ -1128,7 +1209,7 @@ function runMonthlyGenerationIfNeeded() {
     );
 
     if (!alreadyHasInvoice) {
-      state.documents.push({
+      state.documents.push(normalizeDocument({
         id: uid('doc'),
         type: 'facture',
         clientId: client.id,
@@ -1136,16 +1217,18 @@ function runMonthlyGenerationIfNeeded() {
         date: docDate,
         dueDate,
         period,
-        amount: rentAmount + chargesAmount,
+        rent: rentAmount,
+        electricity: 0,
+        water: 0,
         charges: chargesAmount,
         vatRate: 0,
         status: 'unpaid',
         notes: '',
-      });
+      }));
     }
 
     if (!alreadyHasReceipt) {
-      state.documents.push({
+      state.documents.push(normalizeDocument({
         id: uid('doc'),
         type: 'quittance',
         clientId: client.id,
@@ -1153,12 +1236,14 @@ function runMonthlyGenerationIfNeeded() {
         date: docDate,
         dueDate,
         period,
-        amount: rentAmount + chargesAmount,
+        rent: rentAmount,
+        electricity: 0,
+        water: 0,
         charges: chargesAmount,
         vatRate: 0,
         status: 'paid',
         notes: '',
-      });
+      }));
     }
   });
 
@@ -1351,7 +1436,9 @@ function bindEvents() {
       date: item.date,
       dueDate: item.dueDate || getNextMonthFifth(),
       period: String(item.period || '').trim(),
-      amount: Number(item.amount || 0),
+      rent: Number(item.rent || 0),
+      electricity: Number(item.electricity || 0),
+      water: Number(item.water || 0),
       charges: Number(item.charges || 0),
       vatRate: Number(item.vatRate || 0),
       status: item.status,

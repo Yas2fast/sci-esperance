@@ -267,6 +267,7 @@ textarea {
 
 .table-wrap {
   overflow: auto;
+  border-radius: 14px;
 }
 
 table {
@@ -285,6 +286,18 @@ td {
 th {
   color: var(--muted);
   font-weight: 600;
+  background: #fcfdff;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+tbody tr {
+  transition: background 0.18s ease;
+}
+
+tbody tr:hover {
+  background: #fafcff;
 }
 
 .tag {
@@ -293,6 +306,7 @@ th {
   border-radius: 999px;
   font-size: 0.82rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .tag.paid {
@@ -325,6 +339,36 @@ th {
   color: #991b1b;
 }
 
+/* tableau à encaisser / suivi */
+#encaissementPanel {
+  margin-top: 18px;
+}
+
+#encaissementPanel .table-wrap {
+  border: 1px solid #eef2f7;
+  border-radius: 16px;
+}
+
+#encaissementPanel tbody tr:hover {
+  background: #f8fbff;
+}
+
+#encaissementPanel tbody tr td:first-child {
+  border-left: 4px solid transparent;
+}
+
+#encaissementPanel tbody tr:has(.tag.unpaid) td:first-child {
+  border-left-color: #dc2626;
+}
+
+#encaissementPanel tbody tr:has(.tag.facture) td:first-child {
+  border-left-color: #0ea5e9;
+}
+
+#encaissementPanel tbody tr:has(.tag.quittance) td:first-child {
+  border-left-color: #7c3aed;
+}
+
 .action-row {
   display: flex;
   gap: 8px;
@@ -344,8 +388,16 @@ th {
   color: var(--primary-dark);
 }
 
+.link-btn:hover {
+  text-decoration: underline;
+}
+
 .danger-link {
   color: var(--danger);
+}
+
+.danger-link:hover {
+  text-decoration: underline;
 }
 
 .form-grid {
@@ -437,6 +489,7 @@ th {
   text-align: center;
 }
 
+/* Badge statut document */
 .doc-status-badge {
   display: inline-flex;
   align-items: center;
@@ -462,6 +515,7 @@ th {
   background: rgba(220, 38, 38, 0.08);
 }
 
+/* Facture */
 .apple-doc {
   max-width: 900px;
   width: 100%;
@@ -533,6 +587,8 @@ th {
   border-bottom: 2px solid #000;
   color: #000;
   font-weight: 700;
+  background: transparent;
+  position: static;
 }
 
 .apple-doc-total {
@@ -583,6 +639,7 @@ th {
   font-size: 12px;
 }
 
+/* Quittance redesign */
 .receipt-doc {
   min-height: 1122px;
   display: flex;
@@ -692,6 +749,7 @@ th {
   border-bottom: none;
   font-size: 13px;
   padding: 14px 16px;
+  position: static;
 }
 
 .receipt-table td {
@@ -740,6 +798,7 @@ th {
   text-align: center;
 }
 
+/* Relances */
 .reminder-level-1 {
   border-left: 4px solid #f59e0b;
 }
@@ -752,6 +811,7 @@ th {
   border-left: 4px solid #dc2626;
 }
 
+/* Responsive */
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -795,6 +855,10 @@ th {
     margin-left: 0;
     margin-right: auto;
   }
+
+  th {
+    position: static;
+  }
 }
 
 @media print {
@@ -822,5 +886,9 @@ th {
   .apple-doc,
   .receipt-doc {
     max-width: none;
+  }
+
+  th {
+    position: static;
   }
 }

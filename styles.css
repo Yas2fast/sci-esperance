@@ -572,8 +572,8 @@ th {
 }
 
 .invoice-stamp {
-  max-width: 225px;
-  max-height: 98px;
+  max-width: 280px;
+  max-height: 122px;
   object-fit: contain;
 }
 
@@ -733,8 +733,8 @@ th {
 }
 
 .receipt-stamp {
-  max-width: 215px;
-  max-height: 94px;
+  max-width: 270px;
+  max-height: 118px;
   object-fit: contain;
 }
 

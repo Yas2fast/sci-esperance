@@ -44,20 +44,6 @@ function uid(prefix = 'id') {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function formatMoney(value) {
-  const amount = Number(value || 0);
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: state.settings.currency || 'EUR',
-  }).format(amount);
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  const date = new Date(dateStr + 'T00:00:00');
-  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date);
-}
-
 function byId(id) {
   return document.getElementById(id);
 }
@@ -70,6 +56,24 @@ function escapeHtml(str) {
     '"': '&quot;',
     "'": '&#39;',
   }[m]));
+}
+
+function formatMoney(value) {
+  const amount = Number(value || 0);
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: state.settings.currency || 'EUR',
+  }).format(amount);
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const date = new Date(`${dateStr}T00:00:00`);
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date);
+}
+
+function getTodayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function getNextMonthFifth() {
@@ -124,10 +128,12 @@ function getOverdueDays(doc) {
   if (doc.status !== 'unpaid') return 0;
   const refDate = doc.dueDate || doc.date;
   if (!refDate) return 0;
-  const due = new Date(refDate + 'T00:00:00');
+
+  const due = new Date(`${refDate}T00:00:00`);
   const today = new Date();
   due.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
+
   const diff = Math.floor((today - due) / (1000 * 60 * 60 * 24));
   return diff > 0 ? diff : 0;
 }
@@ -136,10 +142,12 @@ function getDaysUntilDue(doc) {
   if (doc.status === 'paid') return null;
   const refDate = doc.dueDate || doc.date;
   if (!refDate) return null;
-  const due = new Date(refDate + 'T00:00:00');
+
+  const due = new Date(`${refDate}T00:00:00`);
   const today = new Date();
   due.setHours(0, 0, 0, 0);
   today.setHours(0, 0, 0, 0);
+
   return Math.floor((due - today) / (1000 * 60 * 60 * 24));
 }
 
@@ -183,6 +191,312 @@ function getDueBadgeHtml(doc) {
   }
 
   return `<span class="tag facture">À venir</span>`;
+}
+
+function nextDocumentNumber(type) {
+  const year = new Date().getFullYear();
+  const prefix = type === 'facture' ? 'FAC' : 'QUI';
+  const count = state.documents.filter(
+    d => d.type === type && String(d.number || '').startsWith(`${prefix}-${year}`)
+  ).length + 1;
+
+  return `${prefix}-${year}-${String(count).padStart(3, '0')}`;
+}
+
+function populateClientOptions(selectedId = '') {
+  const form = byId('documentForm');
+  if (!form || !form.elements.clientId) return;
+
+  const select = form.elements.clientId;
+  select.innerHTML = state.clients.length
+    ? state.clients.map(c =>
+        `<option value="${c.id}">${escapeHtml(c.name)}${c.property ? ' — ' + escapeHtml(c.property) : ''}</option>`
+      ).join('')
+    : '<option value="">Aucun client</option>';
+
+  if (selectedId) select.value = selectedId;
+}
+
+function openClientModal(client = null) {
+  const dialog = byId('clientDialog');
+  const form = byId('clientForm');
+  if (!dialog || !form) return;
+
+  form.reset();
+  byId('clientModalTitle').textContent = client ? 'Modifier le client' : 'Nouveau client';
+  form.elements.id.value = client?.id || '';
+
+  ['name', 'email', 'phone', 'property', 'rentAmount', 'dueDay', 'address', 'notes'].forEach(field => {
+    if (form.elements[field]) {
+      form.elements[field].value = client?.[field] || '';
+    }
+  });
+
+  dialog.showModal();
+}
+
+function openDocumentModal(doc = null, presetType = 'facture', presetClientId = '') {
+  const dialog = byId('documentDialog');
+  const form = byId('documentForm');
+  if (!dialog || !form) return;
+
+  form.reset();
+
+  const type = doc?.type || presetType;
+  byId('documentModalTitle').textContent = doc
+    ? 'Modifier le document'
+    : `Nouvelle ${type === 'facture' ? 'facture' : 'quittance'}`;
+
+  form.elements.id.value = doc?.id || '';
+  form.elements.type.value = type;
+  populateClientOptions(doc?.clientId || presetClientId);
+  form.elements.number.value = doc?.number || nextDocumentNumber(type);
+  form.elements.date.value = doc?.date || getTodayIso();
+  form.elements.dueDate.value = doc?.dueDate || getNextMonthFifth();
+  form.elements.period.value = doc?.period || '';
+  form.elements.amount.value = doc?.amount || '';
+  form.elements.charges.value = doc?.charges || 0;
+  form.elements.vatRate.value = doc?.vatRate ?? 0;
+  form.elements.status.value = doc?.status || (type === 'quittance' ? 'paid' : 'unpaid');
+  form.elements.notes.value = doc?.notes || '';
+
+  if (!doc && presetClientId) {
+    const client = state.clients.find(c => c.id === presetClientId);
+    if (client?.rentAmount) form.elements.amount.value = client.rentAmount;
+    form.elements.period.value = getPeriodLabelFromDate(new Date());
+  }
+
+  dialog.showModal();
+}
+
+function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc) {
+  return `
+    <div class="doc-sheet apple-doc invoice-doc">
+      <div class="apple-doc-header">
+        <div class="apple-doc-company">
+          <h2>SCI DE L'ESPERANCE</h2>
+          <p>35 RUE DES CAILLOUX<br>92110 CLICHY</p>
+          ${s.siret ? `<p>SIRET : ${escapeHtml(s.siret)}</p>` : ''}
+        </div>
+        <div class="apple-doc-meta">
+          ${getStatusBadge(doc.status)}
+          <h1>FACTURE</h1>
+          <p><strong>N° :</strong> ${escapeHtml(doc.number)}</p>
+          <p><strong>Date :</strong> ${formatDate(doc.date)}</p>
+          <p><strong>Échéance :</strong> ${formatDate(doc.dueDate || doc.date)}</p>
+        </div>
+      </div>
+
+      <div class="apple-doc-client">
+        <p><strong>Client :</strong></p>
+        <p>${escapeHtml(client.name || '')}</p>
+        <p>${escapeHtml(client.address || '')}</p>
+      </div>
+
+      <table class="apple-doc-table">
+        <thead>
+          <tr>
+            <th>Désignation</th>
+            <th>Montant (€)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${escapeHtml(doc.period || 'Loyer')}</td>
+            <td>${formatMoney(rentOnly)}</td>
+          </tr>
+          ${charges > 0 ? `
+            <tr>
+              <td>Charges</td>
+              <td>${formatMoney(charges)}</td>
+            </tr>
+          ` : ''}
+        </tbody>
+      </table>
+
+      <div class="apple-doc-total">
+        <p>Total HT : ${formatMoney(totalAmount)}</p>
+        <p>TVA (${vatRate.toFixed(2).replace('.', ',')}%) : ${formatMoney(vatAmount)}</p>
+        <h2>Total TTC : ${formatMoney(totalTtc)}</h2>
+      </div>
+
+      <div class="apple-doc-conditions">
+        <p><strong>Conditions de paiement :</strong></p>
+        <p>Mode de paiement : Chèque ou virement</p>
+        <p>Conditions d’escompte : Aucun escompte en cas de paiement anticipé.</p>
+        <p>Indemnité forfaitaire pour retard de paiement (Décret n° 2012-1115 du 2 octobre 2012) : 40 €</p>
+      </div>
+
+      ${doc.notes ? `<div class="apple-doc-conditions"><p><strong>Notes :</strong> ${escapeHtml(doc.notes)}</p></div>` : ''}
+
+      <div class="apple-doc-signature-row invoice-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp invoice-stamp" alt="Tampon et signature">
+      </div>
+
+      <div class="apple-doc-footer">
+        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
+        35 RUE DES CAILLOUX 92110 CLICHY
+      </div>
+    </div>
+  `;
+}
+
+function createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc) {
+  return `
+    <div class="doc-sheet apple-doc receipt-doc">
+      <div class="receipt-top-bar"></div>
+
+      <div class="receipt-header">
+        <div class="receipt-company-block">
+          <div class="receipt-company-name">SCI DE L'ESPERANCE</div>
+          <div class="receipt-company-lines">
+            35 RUE DES CAILLOUX<br>
+            92110 CLICHY<br>
+            ${s.siret ? `SIRET : ${escapeHtml(s.siret)}` : ''}
+          </div>
+        </div>
+
+        <div class="receipt-title-block">
+          ${getStatusBadge(doc.status)}
+          <div class="receipt-title">QUITTANCE DE LOYER</div>
+          <div class="receipt-meta-line"><strong>N° :</strong> ${escapeHtml(doc.number)}</div>
+          <div class="receipt-meta-line"><strong>Date :</strong> ${formatDate(doc.date)}</div>
+          <div class="receipt-meta-line"><strong>Période :</strong> ${escapeHtml(doc.period || '')}</div>
+        </div>
+      </div>
+
+      <div class="receipt-card-grid">
+        <div class="receipt-card">
+          <div class="receipt-card-title">Locataire</div>
+          <div class="receipt-card-body">
+            <strong>${escapeHtml(client.name || '')}</strong><br>
+            ${escapeHtml(client.address || '')}
+          </div>
+        </div>
+
+        <div class="receipt-card">
+          <div class="receipt-card-title">Bien concerné</div>
+          <div class="receipt-card-body">
+            ${escapeHtml(client.property || '—')}
+          </div>
+        </div>
+      </div>
+
+      <table class="receipt-table">
+        <thead>
+          <tr>
+            <th>Détail</th>
+            <th>Montant</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Loyer</td>
+            <td>${formatMoney(Math.max(0, totalAmount - charges))}</td>
+          </tr>
+          ${charges > 0 ? `
+            <tr>
+              <td>Charges</td>
+              <td>${formatMoney(charges)}</td>
+            </tr>
+          ` : ''}
+          <tr class="receipt-total-row">
+            <td>Total réglé</td>
+            <td>${formatMoney(totalTtc)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="receipt-note">
+        Cette quittance annule tout reçu donné antérieurement pour le même objet.
+      </div>
+
+      ${doc.notes ? `<div class="receipt-extra-note"><strong>Notes :</strong> ${escapeHtml(doc.notes)}</div>` : ''}
+
+      <div class="apple-doc-signature-row receipt-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp receipt-stamp" alt="Tampon et signature">
+      </div>
+
+      <div class="apple-doc-footer receipt-footer">
+        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
+        35 RUE DES CAILLOUX 92110 CLICHY
+      </div>
+    </div>
+  `;
+}
+
+function createDocumentHtml(doc) {
+  const client = state.clients.find(c => c.id === doc.clientId) || {};
+  const s = state.settings;
+
+  const totalAmount = Number(doc.amount || 0);
+  const charges = Number(doc.charges || 0);
+  const vatRate = Number(doc.vatRate || 0);
+  const rentOnly = Math.max(0, totalAmount - charges);
+  const vatAmount = totalAmount * (vatRate / 100);
+  const totalTtc = totalAmount + vatAmount;
+
+  if (doc.type === 'quittance') {
+    return createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc);
+  }
+
+  return createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc);
+}
+
+function createReminderHtml(doc, level) {
+  const client = state.clients.find(c => c.id === doc.clientId) || {};
+  const overdueDays = getOverdueDays(doc);
+  const title = getReminderLabel(level);
+
+  return `
+    <div class="doc-sheet apple-doc">
+      <div class="apple-doc-header">
+        <div class="apple-doc-company">
+          <h2>SCI DE L'ESPERANCE</h2>
+          <p>35 RUE DES CAILLOUX<br>92110 CLICHY</p>
+        </div>
+        <div class="apple-doc-meta">
+          <h1>${title.toUpperCase()}</h1>
+          <p><strong>Date :</strong> ${formatDate(getTodayIso())}</p>
+        </div>
+      </div>
+
+      <div class="apple-doc-client">
+        <p><strong>Destinataire :</strong></p>
+        <p>${escapeHtml(client.name || '')}</p>
+        <p>${escapeHtml(client.address || '')}</p>
+      </div>
+
+      <div class="apple-doc-conditions">
+        <p>Objet : ${escapeHtml(title)} concernant la facture ${escapeHtml(doc.number)}</p>
+        <p>Madame, Monsieur,</p>
+        <p>
+          Sauf erreur de notre part, la facture <strong>${escapeHtml(doc.number)}</strong> relative à
+          <strong>${escapeHtml(doc.period)}</strong>, d’un montant de <strong>${formatMoney(doc.amount)}</strong>,
+          arrivée à échéance le <strong>${formatDate(doc.dueDate || doc.date)}</strong>, demeure impayée à ce jour.
+        </p>
+        <p>Le retard constaté est de <strong>${overdueDays} jour(s)</strong>.</p>
+        ${level === 1
+          ? `<p>Nous vous remercions de bien vouloir procéder au règlement dans les meilleurs délais.</p>`
+          : level === 2
+            ? `<p>Nous vous demandons de régulariser votre situation sous 8 jours à compter de la réception de la présente.</p>`
+            : `<p>Nous vous mettons en demeure de régler la somme due sous 8 jours, à défaut de quoi toute procédure utile pourra être engagée.</p>`
+        }
+        <p>Mode de paiement : Chèque ou virement.</p>
+        <p>Indemnité forfaitaire applicable en cas de retard de paiement : 40 €.</p>
+        <p>Veuillez agréer, Madame, Monsieur, l’expression de nos salutations distinguées.</p>
+      </div>
+
+      <div class="apple-doc-signature-row invoice-signature-row">
+        <img src="tampon-signature.png" class="apple-doc-stamp invoice-stamp" alt="Tampon et signature">
+      </div>
+
+      <div class="apple-doc-footer">
+        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
+        35 RUE DES CAILLOUX 92110 CLICHY
+      </div>
+    </div>
+  `;
 }
 
 function renderStats() {
@@ -257,8 +571,8 @@ function renderEncaissements() {
   const docs = [...state.documents]
     .filter(doc => doc.type === 'facture' && doc.status === 'unpaid')
     .sort((a, b) => {
-      const aDate = new Date((a.dueDate || a.date) + 'T00:00:00');
-      const bDate = new Date((b.dueDate || b.date) + 'T00:00:00');
+      const aDate = new Date(`${a.dueDate || a.date}T00:00:00`);
+      const bDate = new Date(`${b.dueDate || b.date}T00:00:00`);
       return aDate - bDate;
     });
 
@@ -283,9 +597,11 @@ function renderEncaissements() {
         ${docs.map(doc => {
           const client = state.clients.find(c => c.id === doc.clientId);
           const overdueDays = getOverdueDays(doc);
+          const daysUntilDue = getDaysUntilDue(doc);
+
           const dueInfo = overdueDays > 0
             ? `${overdueDays} jour(s) de retard`
-            : (getDaysUntilDue(doc) === 0 ? 'Échéance aujourd’hui' : `Échéance dans ${getDaysUntilDue(doc)} jour(s)`);
+            : (daysUntilDue === 0 ? 'Échéance aujourd’hui' : `Échéance dans ${daysUntilDue} jour(s)`);
 
           return `
             <tr>
@@ -305,9 +621,9 @@ function renderEncaissements() {
               <td>${formatMoney(doc.amount)}</td>
               <td>
                 <div class="action-row">
-                  <button class="link-btn" onclick="toggleStatus('${doc.id}')">Marquer payé</button>
-                  <button class="link-btn" onclick="previewDocument('${doc.id}')">Voir</button>
-                  <button class="link-btn" onclick="duplicateDocument('${doc.id}')">Dupliquer</button>
+                  <button class="link-btn" type="button" onclick="toggleStatus('${doc.id}')">Marquer payé</button>
+                  <button class="link-btn" type="button" onclick="previewDocument('${doc.id}')">Voir</button>
+                  <button class="link-btn" type="button" onclick="duplicateDocument('${doc.id}')">Dupliquer</button>
                 </div>
               </td>
             </tr>
@@ -353,10 +669,10 @@ function renderClients() {
             <td>${client.dueDay || '—'}</td>
             <td>
               <div class="action-row">
-                <button class="link-btn" onclick="editClient('${client.id}')">Modifier</button>
-                <button class="link-btn" onclick="createDocForClient('${client.id}','facture')">Facture</button>
-                <button class="link-btn" onclick="createDocForClient('${client.id}','quittance')">Quittance</button>
-                <button class="danger-link" onclick="deleteClient('${client.id}')">Supprimer</button>
+                <button class="link-btn" type="button" onclick="editClient('${client.id}')">Modifier</button>
+                <button class="link-btn" type="button" onclick="createDocForClient('${client.id}','facture')">Facture</button>
+                <button class="link-btn" type="button" onclick="createDocForClient('${client.id}','quittance')">Quittance</button>
+                <button class="danger-link" type="button" onclick="deleteClient('${client.id}')">Supprimer</button>
               </div>
             </td>
           </tr>
@@ -365,6 +681,43 @@ function renderClients() {
     </table>
   `;
 }
+
+function closeAllMenus() {
+  document.querySelectorAll('.dropdown-menu').forEach(menu => {
+    menu.classList.remove('active');
+  });
+}
+
+window.toggleMenu = function(id, event) {
+  if (event) event.stopPropagation();
+
+  const menu = byId(`menu-${id}`);
+  if (!menu) return;
+
+  const isActive = menu.classList.contains('active');
+  closeAllMenus();
+
+  if (!isActive) {
+    menu.classList.add('active');
+  }
+};
+
+window.duplicateDocument = function(id) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+
+  const duplicated = {
+    ...doc,
+    id: uid('doc'),
+    number: nextDocumentNumber(doc.type),
+    date: getTodayIso(),
+    dueDate: doc.type === 'facture' ? getNextMonthFifth() : (doc.dueDate || getNextMonthFifth()),
+    status: doc.type === 'quittance' ? 'paid' : 'unpaid',
+  };
+
+  state.documents.push(duplicated);
+  refreshAll();
+};
 
 function renderDocuments() {
   const query = byId('documentSearch').value.trim().toLowerCase();
@@ -400,12 +753,13 @@ function renderDocuments() {
           <th>Suivi</th>
           <th>Montant</th>
           <th>Statut</th>
-          <th>Actions</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         ${docs.map(doc => {
           const client = state.clients.find(c => c.id === doc.clientId);
+
           return `
             <tr>
               <td><span class="tag ${doc.type}">${doc.type === 'facture' ? 'Facture' : 'Quittance'}</span></td>
@@ -417,13 +771,18 @@ function renderDocuments() {
               <td>${getDueBadgeHtml(doc)}</td>
               <td>${formatMoney(doc.amount)}</td>
               <td><span class="tag ${doc.status}">${doc.status === 'paid' ? 'Payé' : 'Impayé'}</span></td>
-              <td>
-                <div class="action-row">
-                  <button class="link-btn" onclick="previewDocument('${doc.id}')">Voir</button>
-                  <button class="link-btn" onclick="toggleStatus('${doc.id}')">${doc.status === 'paid' ? 'Mettre impayé' : 'Mettre payé'}</button>
-                  <button class="link-btn" onclick="duplicateDocument('${doc.id}')">Dupliquer</button>
-                  <button class="link-btn" onclick="editDocument('${doc.id}')">Modifier</button>
-                  <button class="danger-link" onclick="deleteDocument('${doc.id}')">Supprimer</button>
+              <td style="position: relative;">
+                <div class="action-menu">
+                  <button class="menu-btn" type="button" onclick="toggleMenu('${doc.id}', event)">⋯</button>
+                  <div id="menu-${doc.id}" class="dropdown-menu">
+                    <button type="button" onclick="previewDocument('${doc.id}'); closeAllMenus();">Voir</button>
+                    <button type="button" onclick="editDocument('${doc.id}'); closeAllMenus();">Modifier</button>
+                    <button type="button" onclick="toggleStatus('${doc.id}'); closeAllMenus();">
+                      ${doc.status === 'paid' ? 'Mettre impayé' : 'Mettre payé'}
+                    </button>
+                    <button type="button" onclick="duplicateDocument('${doc.id}'); closeAllMenus();">Dupliquer</button>
+                    <button type="button" class="danger" onclick="deleteDocument('${doc.id}'); closeAllMenus();">Supprimer</button>
+                  </div>
                 </div>
               </td>
             </tr>
@@ -439,7 +798,7 @@ function renderReminders() {
   if (!wrap) return;
 
   const query = (byId('reminderSearch')?.value || '').trim().toLowerCase();
-  const filter = byId('reminderFilter')?.value || 'all';
+  const filter = (byId('reminderFilter')?.value || 'all');
 
   const docs = [...state.documents]
     .filter(doc => doc.type === 'facture' && doc.status === 'unpaid')
@@ -447,12 +806,14 @@ function renderReminders() {
       const client = state.clients.find(c => c.id === doc.clientId);
       const reminderLevel = getReminderLevel(doc);
       const txt = `${doc.number} ${doc.period} ${client?.name || ''}`.toLowerCase();
+
       const matchQuery = txt.includes(query);
       const matchFilter =
         filter === 'all' ||
         (filter === 'first' && reminderLevel === 1) ||
         (filter === 'second' && reminderLevel === 2) ||
         (filter === 'formal' && reminderLevel >= 3);
+
       return matchQuery && matchFilter;
     })
     .sort((a, b) => new Date(a.dueDate || a.date) - new Date(b.dueDate || b.date));
@@ -492,7 +853,7 @@ function renderReminders() {
               <td>${overdueDays > 0 ? `${overdueDays} jour(s)` : '—'}</td>
               <td>${formatMoney(doc.amount)}</td>
               <td>
-                <button class="link-btn" onclick="previewReminder('${doc.id}', ${level})">Voir</button>
+                <button class="link-btn" type="button" onclick="previewReminder('${doc.id}', ${level})">Voir</button>
               </td>
             </tr>
           `;
@@ -504,8 +865,12 @@ function renderReminders() {
 
 function renderSettings() {
   const form = byId('settingsForm');
+  if (!form) return;
+
   Object.entries(state.settings).forEach(([key, value]) => {
-    if (form.elements[key]) form.elements[key].value = value || '';
+    if (form.elements[key]) {
+      form.elements[key].value = value || '';
+    }
   });
 }
 
@@ -521,316 +886,102 @@ function refreshAll() {
   saveState();
 }
 
-function openClientModal(client = null) {
-  const dialog = byId('clientDialog');
-  const form = byId('clientForm');
-  form.reset();
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sci-esperance-donnees.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
-  byId('clientModalTitle').textContent = client ? 'Modifier le client' : 'Nouveau client';
-  form.elements.id.value = client?.id || '';
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
 
-  ['name', 'email', 'phone', 'property', 'rentAmount', 'dueDay', 'address', 'notes'].forEach(field => {
-    form.elements[field].value = client?.[field] || '';
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      state = {
+        settings: { ...defaultData.settings, ...(parsed.settings || {}) },
+        clients: Array.isArray(parsed.clients) ? parsed.clients : [],
+        documents: Array.isArray(parsed.documents) ? parsed.documents : [],
+      };
+      refreshAll();
+      alert('Données importées.');
+    } catch {
+      alert('Fichier invalide.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function runMonthlyGenerationIfNeeded() {
+  const now = new Date();
+  const monthKey = getMonthKey(now);
+  const lastGenerated = localStorage.getItem(AUTO_MONTHLY_KEY);
+
+  if (lastGenerated === monthKey) return;
+
+  const period = getPeriodLabelFromDate(now);
+  const docDate = getTodayIso();
+  const dueDate = getCurrentMonthFifth(now);
+
+  state.clients.forEach(client => {
+    const rentAmount = Number(client.rentAmount || 0);
+    if (rentAmount <= 0) return;
+
+    const alreadyHasInvoice = state.documents.some(doc =>
+      doc.clientId === client.id &&
+      doc.type === 'facture' &&
+      doc.period === period
+    );
+
+    const alreadyHasReceipt = state.documents.some(doc =>
+      doc.clientId === client.id &&
+      doc.type === 'quittance' &&
+      doc.period === period
+    );
+
+    if (!alreadyHasInvoice) {
+      state.documents.push({
+        id: uid('doc'),
+        type: 'facture',
+        clientId: client.id,
+        number: nextDocumentNumber('facture'),
+        date: docDate,
+        dueDate,
+        period,
+        amount: rentAmount,
+        charges: 0,
+        vatRate: 0,
+        status: 'unpaid',
+        notes: '',
+      });
+    }
+
+    if (!alreadyHasReceipt) {
+      state.documents.push({
+        id: uid('doc'),
+        type: 'quittance',
+        clientId: client.id,
+        number: nextDocumentNumber('quittance'),
+        date: docDate,
+        dueDate,
+        period,
+        amount: rentAmount,
+        charges: 0,
+        vatRate: 0,
+        status: 'paid',
+        notes: '',
+      });
+    }
   });
 
-  dialog.showModal();
-}
-
-function populateClientOptions(selectedId = '') {
-  const select = byId('documentForm').elements.clientId;
-  select.innerHTML = state.clients.length
-    ? state.clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.property ? ' — ' + escapeHtml(c.property) : ''}</option>`).join('')
-    : '<option value="">Aucun client</option>';
-
-  if (selectedId) select.value = selectedId;
-}
-
-function nextDocumentNumber(type) {
-  const year = new Date().getFullYear();
-  const prefix = type === 'facture' ? 'FAC' : 'QUI';
-  const count = state.documents.filter(d => d.type === type && String(d.number || '').startsWith(`${prefix}-${year}`)).length + 1;
-  return `${prefix}-${year}-${String(count).padStart(3, '0')}`;
-}
-
-function openDocumentModal(doc = null, presetType = 'facture', presetClientId = '') {
-  const dialog = byId('documentDialog');
-  const form = byId('documentForm');
-  form.reset();
-
-  const type = doc?.type || presetType;
-  byId('documentModalTitle').textContent = doc
-    ? 'Modifier le document'
-    : `Nouvelle ${type === 'facture' ? 'facture' : 'quittance'}`;
-
-  form.elements.id.value = doc?.id || '';
-  form.elements.type.value = type;
-  populateClientOptions(doc?.clientId || presetClientId);
-  form.elements.number.value = doc?.number || nextDocumentNumber(type);
-  form.elements.date.value = doc?.date || new Date().toISOString().slice(0, 10);
-  form.elements.dueDate.value = doc?.dueDate || getNextMonthFifth();
-  form.elements.period.value = doc?.period || '';
-  form.elements.amount.value = doc?.amount || '';
-  form.elements.charges.value = doc?.charges || 0;
-  form.elements.vatRate.value = doc?.vatRate ?? 0;
-  form.elements.status.value = doc?.status || (type === 'quittance' ? 'paid' : 'unpaid');
-  form.elements.notes.value = doc?.notes || '';
-
-  if (!doc && presetClientId) {
-    const client = state.clients.find(c => c.id === presetClientId);
-    if (client?.rentAmount) form.elements.amount.value = client.rentAmount;
-    form.elements.period.value = getPeriodLabelFromDate(new Date());
-  }
-
-  dialog.showModal();
-}
-
-function createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc) {
-  return `
-    <div class="doc-sheet apple-doc invoice-doc">
-      <div class="apple-doc-header">
-        <div class="apple-doc-company">
-          <h2>SCI DE L'ESPERANCE</h2>
-          <p>35 RUE DES CAILLOUX<br>92110 CLICHY</p>
-          ${s.siret ? `<p>SIRET : ${escapeHtml(s.siret)}</p>` : ''}
-        </div>
-        <div class="apple-doc-meta">
-          ${getStatusBadge(doc.status)}
-          <h1>FACTURE</h1>
-          <p><strong>N° :</strong> ${escapeHtml(doc.number)}</p>
-          <p><strong>Date :</strong> ${formatDate(doc.date)}</p>
-          <p><strong>Échéance :</strong> ${formatDate(doc.dueDate || doc.date)}</p>
-        </div>
-      </div>
-
-      <div class="apple-doc-client">
-        <p><strong>Client :</strong></p>
-        <p>${escapeHtml(client.name || '')}</p>
-        <p>${escapeHtml(client.address || '')}</p>
-      </div>
-
-      <table class="apple-doc-table">
-        <thead>
-          <tr>
-            <th>Désignation</th>
-            <th>Montant (€)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>${escapeHtml(doc.period || 'Loyer')}</td>
-            <td>${formatMoney(rentOnly)}</td>
-          </tr>
-          ${
-            charges > 0
-              ? `
-              <tr>
-                <td>Charges</td>
-                <td>${formatMoney(charges)}</td>
-              </tr>
-            `
-              : ''
-          }
-        </tbody>
-      </table>
-
-      <div class="apple-doc-total">
-        <p>Total HT : ${formatMoney(totalAmount)}</p>
-        <p>TVA (${vatRate.toFixed(2).replace('.', ',')}%) : ${formatMoney(vatAmount)}</p>
-        <h2>Total TTC : ${formatMoney(totalTtc)}</h2>
-      </div>
-
-      <div class="apple-doc-conditions">
-        <p><strong>Conditions de paiement :</strong></p>
-        <p>Mode de paiement : Chèque ou virement</p>
-        <p>Conditions d’escompte : Aucun escompte en cas de paiement anticipé.</p>
-        <p>Indemnité forfaitaire pour retard de paiement (Décret n° 2012-1115 du 2 octobre 2012) : 40 €</p>
-      </div>
-
-      ${
-        doc.notes
-          ? `<div class="apple-doc-conditions"><p><strong>Notes :</strong> ${escapeHtml(doc.notes)}</p></div>`
-          : ''
-      }
-
-      <div class="apple-doc-signature-row invoice-signature-row">
-        <img src="tampon-signature.png" class="apple-doc-stamp invoice-stamp" alt="Tampon et signature">
-      </div>
-
-      <div class="apple-doc-footer">
-        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
-        35 RUE DES CAILLOUX 92110 CLICHY
-      </div>
-    </div>
-  `;
-}
-
-function createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc) {
-  return `
-    <div class="doc-sheet apple-doc receipt-doc">
-      <div class="receipt-top-bar"></div>
-
-      <div class="receipt-header">
-        <div class="receipt-company-block">
-          <div class="receipt-company-name">SCI DE L'ESPERANCE</div>
-          <div class="receipt-company-lines">
-            35 RUE DES CAILLOUX<br>
-            92110 CLICHY<br>
-            ${s.siret ? `SIRET : ${escapeHtml(s.siret)}` : ''}
-          </div>
-        </div>
-
-        <div class="receipt-title-block">
-          ${getStatusBadge(doc.status)}
-          <div class="receipt-title">QUITTANCE DE LOYER</div>
-          <div class="receipt-meta-line"><strong>N° :</strong> ${escapeHtml(doc.number)}</div>
-          <div class="receipt-meta-line"><strong>Date :</strong> ${formatDate(doc.date)}</div>
-          <div class="receipt-meta-line"><strong>Période :</strong> ${escapeHtml(doc.period || '')}</div>
-        </div>
-      </div>
-
-      <div class="receipt-card-grid">
-        <div class="receipt-card">
-          <div class="receipt-card-title">Locataire</div>
-          <div class="receipt-card-body">
-            <strong>${escapeHtml(client.name || '')}</strong><br>
-            ${escapeHtml(client.address || '')}
-          </div>
-        </div>
-
-        <div class="receipt-card">
-          <div class="receipt-card-title">Bien concerné</div>
-          <div class="receipt-card-body">
-            ${escapeHtml(client.property || '—')}
-          </div>
-        </div>
-      </div>
-
-      <table class="receipt-table">
-        <thead>
-          <tr>
-            <th>Détail</th>
-            <th>Montant</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Loyer</td>
-            <td>${formatMoney(Math.max(0, totalAmount - charges))}</td>
-          </tr>
-          ${
-            charges > 0
-              ? `
-              <tr>
-                <td>Charges</td>
-                <td>${formatMoney(charges)}</td>
-              </tr>
-            `
-              : ''
-          }
-          <tr class="receipt-total-row">
-            <td>Total réglé</td>
-            <td>${formatMoney(totalTtc)}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div class="receipt-note">
-        Cette quittance annule tout reçu donné antérieurement pour le même objet.
-      </div>
-
-      ${
-        doc.notes
-          ? `<div class="receipt-extra-note"><strong>Notes :</strong> ${escapeHtml(doc.notes)}</div>`
-          : ''
-      }
-
-      <div class="apple-doc-signature-row receipt-signature-row">
-        <img src="tampon-signature.png" class="apple-doc-stamp receipt-stamp" alt="Tampon et signature">
-      </div>
-
-      <div class="apple-doc-footer receipt-footer">
-        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
-        35 RUE DES CAILLOUX 92110 CLICHY
-      </div>
-    </div>
-  `;
-}
-
-function createDocumentHtml(doc) {
-  const client = state.clients.find(c => c.id === doc.clientId) || {};
-  const s = state.settings;
-
-  const totalAmount = Number(doc.amount || 0);
-  const charges = Number(doc.charges || 0);
-  const vatRate = Number(doc.vatRate || 0);
-  const rentOnly = Math.max(0, totalAmount - charges);
-  const vatAmount = totalAmount * (vatRate / 100);
-  const totalTtc = totalAmount + vatAmount;
-
-  if (doc.type === 'quittance') {
-    return createReceiptHtml(doc, client, s, totalAmount, charges, totalTtc);
-  }
-
-  return createInvoiceHtml(doc, client, s, totalAmount, charges, vatRate, rentOnly, vatAmount, totalTtc);
-}
-
-function createReminderHtml(doc, level) {
-  const client = state.clients.find(c => c.id === doc.clientId) || {};
-  const overdueDays = getOverdueDays(doc);
-  const title = getReminderLabel(level);
-
-  return `
-    <div class="doc-sheet apple-doc">
-      <div class="apple-doc-header">
-        <div class="apple-doc-company">
-          <h2>SCI DE L'ESPERANCE</h2>
-          <p>35 RUE DES CAILLOUX<br>92110 CLICHY</p>
-        </div>
-        <div class="apple-doc-meta">
-          <h1>${title.toUpperCase()}</h1>
-          <p><strong>Date :</strong> ${formatDate(new Date().toISOString().slice(0, 10))}</p>
-        </div>
-      </div>
-
-      <div class="apple-doc-client">
-        <p><strong>Destinataire :</strong></p>
-        <p>${escapeHtml(client.name || '')}</p>
-        <p>${escapeHtml(client.address || '')}</p>
-      </div>
-
-      <div class="apple-doc-conditions">
-        <p>Objet : ${escapeHtml(title)} concernant la facture ${escapeHtml(doc.number)}</p>
-        <p>Madame, Monsieur,</p>
-        <p>
-          Sauf erreur de notre part, la facture <strong>${escapeHtml(doc.number)}</strong> relative à
-          <strong>${escapeHtml(doc.period)}</strong>, d’un montant de <strong>${formatMoney(doc.amount)}</strong>,
-          arrivée à échéance le <strong>${formatDate(doc.dueDate || doc.date)}</strong>, demeure impayée à ce jour.
-        </p>
-        <p>
-          Le retard constaté est de <strong>${overdueDays} jour(s)</strong>.
-        </p>
-        ${
-          level === 1
-            ? `<p>Nous vous remercions de bien vouloir procéder au règlement dans les meilleurs délais.</p>`
-            : level === 2
-            ? `<p>Nous vous demandons de régulariser votre situation sous 8 jours à compter de la réception de la présente.</p>`
-            : `<p>Nous vous mettons en demeure de régler la somme due sous 8 jours, à défaut de quoi toute procédure utile pourra être engagée.</p>`
-        }
-        <p>Mode de paiement : Chèque ou virement.</p>
-        <p>Indemnité forfaitaire applicable en cas de retard de paiement : 40 €.</p>
-        <p>Veuillez agréer, Madame, Monsieur, l’expression de nos salutations distinguées.</p>
-      </div>
-
-      <div class="apple-doc-signature-row invoice-signature-row">
-        <img src="tampon-signature.png" class="apple-doc-stamp invoice-stamp" alt="Tampon et signature">
-      </div>
-
-      <div class="apple-doc-footer">
-        SCI DE L'ESPERANCE – au capital de 10.000 €<br>
-        35 RUE DES CAILLOUX 92110 CLICHY
-      </div>
-    </div>
-  `;
+  localStorage.setItem(AUTO_MONTHLY_KEY, monthKey);
+  saveState();
 }
 
 async function downloadCurrentPdf() {
@@ -891,13 +1042,14 @@ async function downloadCurrentPdf() {
     }
 
     const titleEl = printArea.querySelector('.apple-doc-meta h1, .receipt-title');
-    const numberParagraph = Array.from(printArea.querySelectorAll('.apple-doc-meta p, .receipt-meta-line'))
-      .find(p => p.textContent.includes('N°'));
+    const numberParagraph = Array.from(
+      printArea.querySelectorAll('.apple-doc-meta p, .receipt-meta-line')
+    ).find(p => p.textContent.includes('N°'));
 
     const rawTitle = titleEl ? titleEl.textContent.trim() : 'document';
     const rawNumber = numberParagraph
       ? numberParagraph.textContent.replace('N° :', '').replace('N°:', '').trim()
-      : new Date().getTime().toString();
+      : String(Date.now());
 
     const safeTitle = rawTitle.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿñæœ-]+/gi, '-');
     const safeNumber = rawNumber.replace(/[^a-zA-Z0-9_-]+/g, '-');
@@ -949,23 +1101,6 @@ window.toggleStatus = function(id) {
   refreshAll();
 };
 
-window.duplicateDocument = function(id) {
-  const doc = state.documents.find(d => d.id === id);
-  if (!doc) return;
-
-  const duplicated = {
-    ...doc,
-    id: uid('doc'),
-    number: nextDocumentNumber(doc.type),
-    date: new Date().toISOString().slice(0, 10),
-    dueDate: doc.type === 'facture' ? getNextMonthFifth() : (doc.dueDate || getNextMonthFifth()),
-    status: doc.type === 'quittance' ? 'paid' : 'unpaid',
-  };
-
-  state.documents.push(duplicated);
-  refreshAll();
-};
-
 window.previewDocument = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (!doc) return;
@@ -985,24 +1120,24 @@ function bindEvents() {
     btn.addEventListener('click', () => setView(btn.dataset.view));
   });
 
-  byId('quickAddClient').addEventListener('click', () => openClientModal());
-  byId('addClientBtn').addEventListener('click', () => openClientModal());
+  byId('quickAddClient')?.addEventListener('click', () => openClientModal());
+  byId('addClientBtn')?.addEventListener('click', () => openClientModal());
 
-  byId('newInvoiceShortcut').addEventListener('click', () =>
+  byId('newInvoiceShortcut')?.addEventListener('click', () =>
     state.clients.length ? openDocumentModal(null, 'facture') : alert('Ajoutez d’abord un client.')
   );
 
-  byId('newReceiptShortcut').addEventListener('click', () =>
+  byId('newReceiptShortcut')?.addEventListener('click', () =>
     state.clients.length ? openDocumentModal(null, 'quittance') : alert('Ajoutez d’abord un client.')
   );
 
-  byId('goClientsShortcut').addEventListener('click', () => setView('clients'));
+  byId('goClientsShortcut')?.addEventListener('click', () => setView('clients'));
 
-  byId('addInvoiceBtn').addEventListener('click', () =>
+  byId('addInvoiceBtn')?.addEventListener('click', () =>
     state.clients.length ? openDocumentModal(null, 'facture') : alert('Ajoutez d’abord un client.')
   );
 
-  byId('addReceiptBtn').addEventListener('click', () =>
+  byId('addReceiptBtn')?.addEventListener('click', () =>
     state.clients.length ? openDocumentModal(null, 'quittance') : alert('Ajoutez d’abord un client.')
   );
 
@@ -1027,14 +1162,13 @@ function bindEvents() {
     previewReminder(doc.id, 3);
   });
 
-  byId('clientSearch').addEventListener('input', renderClients);
-  byId('documentSearch').addEventListener('input', renderDocuments);
-  byId('documentFilter').addEventListener('change', renderDocuments);
-
+  byId('clientSearch')?.addEventListener('input', renderClients);
+  byId('documentSearch')?.addEventListener('input', renderDocuments);
+  byId('documentFilter')?.addEventListener('change', renderDocuments);
   byId('reminderSearch')?.addEventListener('input', renderReminders);
   byId('reminderFilter')?.addEventListener('change', renderReminders);
 
-  byId('clientForm').addEventListener('submit', e => {
+  byId('clientForm')?.addEventListener('submit', e => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const item = Object.fromEntries(fd.entries());
@@ -1056,10 +1190,10 @@ function bindEvents() {
     else state.clients.push(payload);
 
     refreshAll();
-    byId('clientDialog').close();
+    byId('clientDialog')?.close();
   });
 
-  byId('documentForm').addEventListener('submit', e => {
+  byId('documentForm')?.addEventListener('submit', e => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const item = Object.fromEntries(fd.entries());
@@ -1086,10 +1220,10 @@ function bindEvents() {
     else state.documents.push(payload);
 
     refreshAll();
-    byId('documentDialog').close();
+    byId('documentDialog')?.close();
   });
 
-  byId('settingsForm').addEventListener('submit', e => {
+  byId('settingsForm')?.addEventListener('submit', e => {
     e.preventDefault();
     const fd = new FormData(e.target);
     state.settings = { ...state.settings, ...Object.fromEntries(fd.entries()) };
@@ -1098,134 +1232,27 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-close]').forEach(btn => {
-    btn.addEventListener('click', () => byId(btn.dataset.close).close());
+    btn.addEventListener('click', () => byId(btn.dataset.close)?.close());
   });
 
   byId('printNowBtn')?.addEventListener('click', () => window.print());
   byId('downloadPdfBtn')?.addEventListener('click', downloadCurrentPdf);
-  byId('exportBtn').addEventListener('click', exportData);
-  byId('importInput').addEventListener('change', importData);
-}
+  byId('exportBtn')?.addEventListener('click', exportData);
+  byId('importInput')?.addEventListener('change', importData);
 
-function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'sci-esperance-donnees.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function importData(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const parsed = JSON.parse(reader.result);
-      state = {
-        settings: { ...defaultData.settings, ...(parsed.settings || {}) },
-        clients: Array.isArray(parsed.clients) ? parsed.clients : [],
-        documents: Array.isArray(parsed.documents) ? parsed.documents : [],
-      };
-      refreshAll();
-      alert('Données importées.');
-    } catch {
-      alert('Fichier invalide.');
-    }
-  };
-  reader.readAsText(file);
-}
-
-function runMonthlyGenerationIfNeeded() {
-  const now = new Date();
-  const monthKey = getMonthKey(now);
-  const lastGenerated = localStorage.getItem(AUTO_MONTHLY_KEY);
-
-  if (lastGenerated === monthKey) return;
-
-  const period = getPeriodLabelFromDate(now);
-  const docDate = now.toISOString().slice(0, 10);
-  const dueDate = getCurrentMonthFifth(now);
-
-  state.clients.forEach(client => {
-    const rentAmount = Number(client.rentAmount || 0);
-    if (rentAmount <= 0) return;
-
-    const alreadyHasInvoice = state.documents.some(doc =>
-      doc.clientId === client.id &&
-      doc.type === 'facture' &&
-      doc.period === period
-    );
-
-    const alreadyHasReceipt = state.documents.some(doc =>
-      doc.clientId === client.id &&
-      doc.type === 'quittance' &&
-      doc.period === period
-    );
-
-    if (!alreadyHasInvoice) {
-      state.documents.push({
-        id: uid('doc'),
-        type: 'facture',
-        clientId: client.id,
-        number: nextDocumentNumber('facture'),
-        date: docDate,
-        dueDate,
-        period,
-        amount: rentAmount,
-        charges: 0,
-        vatRate: 0,
-        status: 'unpaid',
-        notes: '',
-      });
-    }
-
-    if (!alreadyHasReceipt) {
-      state.documents.push({
-        id: uid('doc'),
-        type: 'quittance',
-        clientId: client.id,
-        number: nextDocumentNumber('quittance'),
-        date: docDate,
-        dueDate,
-        period,
-        amount: rentAmount,
-        charges: 0,
-        vatRate: 0,
-        status: 'paid',
-        notes: '',
-      });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.action-menu')) {
+      closeAllMenus();
     }
   });
 
-  localStorage.setItem(AUTO_MONTHLY_KEY, monthKey);
-  saveState();
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeAllMenus();
+    }
+  });
 }
 
 bindEvents();
 runMonthlyGenerationIfNeeded();
 refreshAll();
-function toggleMenu(id) {
-  document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('active'));
-  const el = document.getElementById(`menu-${id}`);
-  el.classList.toggle('active');
-}
-
-function duplicateDocument(id) {
-  const doc = state.documents.find(d => d.id === id);
-  if (!doc) return;
-
-  const copy = {
-    ...doc,
-    id: uid('doc'),
-    number: nextDocumentNumber(doc.type),
-    date: new Date().toISOString().slice(0, 10),
-    status: doc.type === 'quittance' ? 'paid' : 'unpaid'
-  };
-
-  state.documents.push(copy);
-  refreshAll();
-}

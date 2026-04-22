@@ -92,19 +92,11 @@ function getNumeric(value) {
 }
 
 function getClientMonthlyCharges(client = {}) {
-  return Number(
-    client.chargesAmount ??
-    client.monthlyCharges ??
-    0
-  );
+  return Number(client.chargesAmount ?? client.monthlyCharges ?? 0);
 }
 
 function getClientDeposit(client = {}) {
-  return Number(
-    client.securityDeposit ??
-    client.depositAmount ??
-    0
-  );
+  return Number(client.securityDeposit ?? client.depositAmount ?? 0);
 }
 
 function getClientLeaseStart(client = {}) {
@@ -353,7 +345,9 @@ function populateClientOptions(selectedId = '') {
     : '<option value="">Aucun client</option>';
 
   if (selectedId) select.value = selectedId;
-}function openClientModal(client = null) {
+}
+
+function openClientModal(client = null) {
   const dialog = byId('clientDialog');
   const form = byId('clientForm');
   if (!dialog || !form) return;
@@ -370,16 +364,12 @@ function populateClientOptions(selectedId = '') {
   setFormValue(form, 'property', safeClient.property);
   setFormValue(form, 'rentAmount', safeClient.rentAmount);
   setFormValue(form, 'chargesAmount', safeClient.chargesAmount);
-  setFormValue(form, 'monthlyCharges', safeClient.chargesAmount);
   setFormValue(form, 'dueDay', safeClient.dueDay);
   setFormValue(form, 'address', safeClient.address);
   setFormValue(form, 'notes', safeClient.notes);
   setFormValue(form, 'leaseStartDate', safeClient.leaseStartDate);
-  setFormValue(form, 'entryDate', safeClient.leaseStartDate);
   setFormValue(form, 'leaseEndDate', safeClient.leaseEndDate);
-  setFormValue(form, 'endDate', safeClient.leaseEndDate);
   setFormValue(form, 'securityDeposit', safeClient.securityDeposit);
-  setFormValue(form, 'depositAmount', safeClient.securityDeposit);
   setFormValue(form, 'paymentMethod', safeClient.paymentMethod);
   setFormValue(form, 'paymentFrequency', safeClient.paymentFrequency);
   setFormValue(form, 'tenantStatus', safeClient.tenantStatus);
@@ -415,7 +405,6 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   setFormValue(form, 'electricity', normalizedDoc.electricity || 0);
   setFormValue(form, 'water', normalizedDoc.water || 0);
   setFormValue(form, 'charges', normalizedDoc.charges || 0);
-  setFormValue(form, 'amount', normalizedDoc.amount || '');
   setFormValue(form, 'vatRate', normalizedDoc.vatRate ?? 0);
   setFormValue(form, 'status', normalizedDoc.status || (type === 'quittance' ? 'paid' : 'unpaid'));
   setFormValue(form, 'notes', normalizedDoc.notes || '');
@@ -428,9 +417,7 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   }
 
   dialog.showModal();
-}
-
-function createInvoiceHtml(doc, client, s) {
+}function createInvoiceHtml(doc, client, s) {
   const breakdown = getDocumentBreakdown(doc);
   const { rent, electricity, water, charges, subtotal, vatRate, vatAmount, totalTtc } = breakdown;
 
@@ -739,7 +726,15 @@ function createReceiptFromInvoice(invoiceDoc) {
       id: uid('doc'),
     });
   }
-}window.editClient = function(id) {
+}
+
+function removeReceiptForInvoice(invoiceDoc) {
+  state.documents = state.documents.filter(d =>
+    !(d.type === 'quittance' && d.clientId === invoiceDoc.clientId && d.period === invoiceDoc.period)
+  );
+}
+
+window.editClient = function(id) {
   const client = state.clients.find(c => c.id === id);
   if (client) openClientModal(client);
 };
@@ -771,17 +766,15 @@ window.toggleStatus = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (!doc) return;
 
-  const wasPaid = doc.status === 'paid';
-  doc.status = wasPaid ? 'unpaid' : 'paid';
+  const newStatus = doc.status === 'paid' ? 'unpaid' : 'paid';
+  doc.status = newStatus;
 
-  if (doc.type === 'facture' && doc.status === 'paid') {
+  if (doc.type === 'facture' && newStatus === 'paid') {
     createReceiptFromInvoice(doc);
   }
 
-  if (doc.type === 'facture' && doc.status === 'unpaid') {
-    state.documents = state.documents.filter(d =>
-      !(d.type === 'quittance' && d.clientId === doc.clientId && d.period === doc.period)
-    );
+  if (doc.type === 'facture' && newStatus === 'unpaid') {
+    removeReceiptForInvoice(doc);
   }
 
   refreshAll();
@@ -819,12 +812,14 @@ window.previewReminder = function(id, level) {
 };
 
 function renderStats() {
-  const paidTotal = state.documents
-    .filter(d => d.status === 'paid' && (d.type === 'facture' || d.type === 'quittance'))
+  const invoiceDocs = state.documents.filter(d => d.type === 'facture');
+
+  const paidTotal = invoiceDocs
+    .filter(d => d.status === 'paid')
     .reduce((a, b) => a + Number(getDocumentBreakdown(b).totalTtc || 0), 0);
 
-  const unpaidTotal = state.documents
-    .filter(d => d.status === 'unpaid' && (d.type === 'facture' || d.type === 'quittance'))
+  const unpaidTotal = invoiceDocs
+    .filter(d => d.status === 'unpaid')
     .reduce((a, b) => a + Number(getDocumentBreakdown(b).totalTtc || 0), 0);
 
   if (byId('statClients')) byId('statClients').textContent = state.clients.length;
@@ -861,9 +856,7 @@ function renderRecentDocuments() {
       </div>
     `;
   }).join('');
-}
-
-function ensureEncaissementPanel() {
+}function ensureEncaissementPanel() {
   const dashboardView = byId('dashboardView');
   if (!dashboardView) return;
 
@@ -1432,13 +1425,13 @@ function bindEvents() {
       phone: String(item.phone || '').trim(),
       property: String(item.property || '').trim(),
       rentAmount: item.rentAmount ? Number(item.rentAmount) : 0,
-      chargesAmount: item.chargesAmount ? Number(item.chargesAmount) : Number(item.monthlyCharges || 0),
+      chargesAmount: item.chargesAmount ? Number(item.chargesAmount) : 0,
       dueDay: item.dueDay ? Number(item.dueDay) : '',
       address: String(item.address || '').trim(),
       notes: String(item.notes || '').trim(),
-      leaseStartDate: String(item.leaseStartDate || item.entryDate || '').trim(),
-      leaseEndDate: String(item.leaseEndDate || item.endDate || '').trim(),
-      securityDeposit: item.securityDeposit ? Number(item.securityDeposit) : Number(item.depositAmount || 0),
+      leaseStartDate: String(item.leaseStartDate || '').trim(),
+      leaseEndDate: String(item.leaseEndDate || '').trim(),
+      securityDeposit: item.securityDeposit ? Number(item.securityDeposit) : 0,
       paymentMethod: String(item.paymentMethod || '').trim(),
       paymentFrequency: String(item.paymentFrequency || 'mensuel').trim(),
       tenantStatus: String(item.tenantStatus || 'actif').trim(),
@@ -1474,15 +1467,25 @@ function bindEvents() {
       electricity: Number(item.electricity || 0),
       water: Number(item.water || 0),
       charges: Number(item.charges || 0),
-      amount: Number(item.amount || 0),
       vatRate: Number(item.vatRate || 0),
       status: item.status,
       notes: String(item.notes || '').trim(),
     });
 
     const index = state.documents.findIndex(d => d.id === payload.id);
-    if (index >= 0) state.documents[index] = payload;
-    else state.documents.push(payload);
+    if (index >= 0) {
+      state.documents[index] = payload;
+    } else {
+      state.documents.push(payload);
+    }
+
+    if (payload.type === 'facture' && payload.status === 'paid') {
+      createReceiptFromInvoice(payload);
+    }
+
+    if (payload.type === 'facture' && payload.status === 'unpaid') {
+      removeReceiptForInvoice(payload);
+    }
 
     refreshAll();
     byId('documentDialog')?.close();

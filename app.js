@@ -71,6 +71,14 @@ function escapeHtml(str) {
   }[m]));
 }
 
+function getNextMonthFifth() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const nextMonthDate = new Date(year, month + 1, 5);
+  return nextMonthDate.toISOString().slice(0, 10);
+}
+
 function setView(view) {
   const titles = {
     dashboard: ['Tableau de bord', 'Vue rapide de votre activité'],
@@ -379,7 +387,7 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   populateClientOptions(doc?.clientId || presetClientId);
   form.elements.number.value = doc?.number || nextDocumentNumber(type);
   form.elements.date.value = doc?.date || new Date().toISOString().slice(0, 10);
-  form.elements.dueDate.value = doc?.dueDate || doc?.date || new Date().toISOString().slice(0, 10);
+  form.elements.dueDate.value = doc?.dueDate || getNextMonthFifth();
   form.elements.period.value = doc?.period || '';
   form.elements.amount.value = doc?.amount || '';
   form.elements.charges.value = doc?.charges || 0;
@@ -794,7 +802,7 @@ function bindEvents() {
       clientId: item.clientId,
       number: item.number.trim(),
       date: item.date,
-      dueDate: item.dueDate || item.date,
+      dueDate: item.dueDate || getNextMonthFifth(),
       period: item.period.trim(),
       amount: Number(item.amount || 0),
       charges: Number(item.charges || 0),

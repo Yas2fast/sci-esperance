@@ -80,15 +80,13 @@ function getNextMonthFifth() {
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth();
-  const nextMonthDate = new Date(year, month + 1, 5);
-  return nextMonthDate.toISOString().slice(0, 10);
+  return new Date(year, month + 1, 5).toISOString().slice(0, 10);
 }
 
 function getCurrentMonthFifth(date = new Date()) {
   const year = date.getFullYear();
   const month = date.getMonth();
-  const currentMonthDate = new Date(year, month, 5);
-  return currentMonthDate.toISOString().slice(0, 10);
+  return new Date(year, month, 5).toISOString().slice(0, 10);
 }
 
 function getPeriodLabelFromDate(date = new Date()) {
@@ -100,6 +98,16 @@ function getPeriodLabelFromDate(date = new Date()) {
 
 function getMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function nextDocumentNumber(type) {
+  const year = new Date().getFullYear();
+  const prefix = type === 'facture' ? 'FAC' : 'QUI';
+  const count = state.documents.filter(
+    d => d.type === type && String(d.number || '').startsWith(`${prefix}-${year}`)
+  ).length + 1;
+
+  return `${prefix}-${year}-${String(count).padStart(3, '0')}`;
 }
 
 function setView(view) {
@@ -115,13 +123,15 @@ function setView(view) {
     btn.classList.toggle('active', btn.dataset.view === view);
   });
 
-  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(el => {
+    el.classList.remove('active');
+  });
 
   const target = byId(`${view}View`);
   if (target) target.classList.add('active');
 
-  byId('pageTitle').textContent = titles[view][0];
-  byId('pageSubtitle').textContent = titles[view][1];
+  if (byId('pageTitle')) byId('pageTitle').textContent = titles[view][0];
+  if (byId('pageSubtitle')) byId('pageSubtitle').textContent = titles[view][1];
 }
 
 function getOverdueDays(doc) {
@@ -193,16 +203,6 @@ function getDueBadgeHtml(doc) {
   return `<span class="tag facture">À venir</span>`;
 }
 
-function nextDocumentNumber(type) {
-  const year = new Date().getFullYear();
-  const prefix = type === 'facture' ? 'FAC' : 'QUI';
-  const count = state.documents.filter(
-    d => d.type === type && String(d.number || '').startsWith(`${prefix}-${year}`)
-  ).length + 1;
-
-  return `${prefix}-${year}-${String(count).padStart(3, '0')}`;
-}
-
 function populateClientOptions(selectedId = '') {
   const form = byId('documentForm');
   if (!form || !form.elements.clientId) return;
@@ -214,7 +214,9 @@ function populateClientOptions(selectedId = '') {
       ).join('')
     : '<option value="">Aucun client</option>';
 
-  if (selectedId) select.value = selectedId;
+  if (selectedId) {
+    select.value = selectedId;
+  }
 }
 
 function openClientModal(client = null) {
@@ -499,6 +501,92 @@ function createReminderHtml(doc, level) {
   `;
 }
 
+function closeAllMenus() {
+  document.querySelectorAll('.dropdown-menu').forEach(menu => {
+    menu.classList.remove('active');
+  });
+}
+
+window.toggleMenu = function(id, event) {
+  if (event) event.stopPropagation();
+
+  const menu = byId(`menu-${id}`);
+  if (!menu) return;
+
+  const alreadyOpen = menu.classList.contains('active');
+  closeAllMenus();
+
+  if (!alreadyOpen) {
+    menu.classList.add('active');
+  }
+};
+
+window.editClient = function(id) {
+  const client = state.clients.find(c => c.id === id);
+  if (client) openClientModal(client);
+};
+
+window.deleteClient = function(id) {
+  if (!confirm('Supprimer ce client ?')) return;
+  state.clients = state.clients.filter(c => c.id !== id);
+  state.documents = state.documents.filter(d => d.clientId !== id);
+  refreshAll();
+};
+
+window.createDocForClient = function(clientId, type) {
+  if (!state.clients.length) return alert('Ajoutez d’abord un client.');
+  openDocumentModal(null, type, clientId);
+};
+
+window.editDocument = function(id) {
+  const doc = state.documents.find(d => d.id === id);
+  if (doc) openDocumentModal(doc, doc.type, doc.clientId);
+};
+
+window.deleteDocument = function(id) {
+  if (!confirm('Supprimer ce document ?')) return;
+  state.documents = state.documents.filter(d => d.id !== id);
+  refreshAll();
+};
+
+window.toggleStatus = function(id) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+  doc.status = doc.status === 'paid' ? 'unpaid' : 'paid';
+  refreshAll();
+};
+
+window.duplicateDocument = function(id) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+
+  const duplicated = {
+    ...doc,
+    id: uid('doc'),
+    number: nextDocumentNumber(doc.type),
+    date: getTodayIso(),
+    dueDate: doc.type === 'facture' ? getNextMonthFifth() : (doc.dueDate || getNextMonthFifth()),
+    status: doc.type === 'quittance' ? 'paid' : 'unpaid',
+  };
+
+  state.documents.push(duplicated);
+  refreshAll();
+};
+
+window.previewDocument = function(id) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+  byId('printArea').innerHTML = createDocumentHtml(doc);
+  byId('printDialog').showModal();
+};
+
+window.previewReminder = function(id, level) {
+  const doc = state.documents.find(d => d.id === id);
+  if (!doc) return;
+  byId('printArea').innerHTML = createReminderHtml(doc, level);
+  byId('printDialog').showModal();
+};
+
 function renderStats() {
   const paidTotal = state.documents
     .filter(d => d.status === 'paid' && (d.type === 'facture' || d.type === 'quittance'))
@@ -508,14 +596,16 @@ function renderStats() {
     .filter(d => d.status === 'unpaid' && (d.type === 'facture' || d.type === 'quittance'))
     .reduce((a, b) => a + Number(b.amount || 0), 0);
 
-  byId('statClients').textContent = state.clients.length;
-  byId('statDocuments').textContent = state.documents.filter(d => d.type === 'facture' || d.type === 'quittance').length;
-  byId('statPaid').textContent = formatMoney(paidTotal);
-  byId('statUnpaid').textContent = formatMoney(unpaidTotal);
+  if (byId('statClients')) byId('statClients').textContent = state.clients.length;
+  if (byId('statDocuments')) byId('statDocuments').textContent = state.documents.filter(d => d.type === 'facture' || d.type === 'quittance').length;
+  if (byId('statPaid')) byId('statPaid').textContent = formatMoney(paidTotal);
+  if (byId('statUnpaid')) byId('statUnpaid').textContent = formatMoney(unpaidTotal);
 }
 
 function renderRecentDocuments() {
   const wrap = byId('recentDocuments');
+  if (!wrap) return;
+
   const docs = [...state.documents]
     .filter(d => d.type === 'facture' || d.type === 'quittance')
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -635,13 +725,15 @@ function renderEncaissements() {
 }
 
 function renderClients() {
-  const query = byId('clientSearch').value.trim().toLowerCase();
+  const wrap = byId('clientsTableWrap');
+  if (!wrap) return;
+
+  const query = (byId('clientSearch')?.value || '').trim().toLowerCase();
   const rows = state.clients.filter(c => {
     const txt = `${c.name} ${c.email} ${c.phone} ${c.property}`.toLowerCase();
     return txt.includes(query);
   });
 
-  const wrap = byId('clientsTableWrap');
   if (!rows.length) {
     wrap.innerHTML = '<div class="empty">Aucun client trouvé.</div>';
     return;
@@ -682,46 +774,12 @@ function renderClients() {
   `;
 }
 
-function closeAllMenus() {
-  document.querySelectorAll('.dropdown-menu').forEach(menu => {
-    menu.classList.remove('active');
-  });
-}
-
-window.toggleMenu = function(id, event) {
-  if (event) event.stopPropagation();
-
-  const menu = byId(`menu-${id}`);
-  if (!menu) return;
-
-  const isActive = menu.classList.contains('active');
-  closeAllMenus();
-
-  if (!isActive) {
-    menu.classList.add('active');
-  }
-};
-
-window.duplicateDocument = function(id) {
-  const doc = state.documents.find(d => d.id === id);
-  if (!doc) return;
-
-  const duplicated = {
-    ...doc,
-    id: uid('doc'),
-    number: nextDocumentNumber(doc.type),
-    date: getTodayIso(),
-    dueDate: doc.type === 'facture' ? getNextMonthFifth() : (doc.dueDate || getNextMonthFifth()),
-    status: doc.type === 'quittance' ? 'paid' : 'unpaid',
-  };
-
-  state.documents.push(duplicated);
-  refreshAll();
-};
-
 function renderDocuments() {
-  const query = byId('documentSearch').value.trim().toLowerCase();
-  const filter = byId('documentFilter').value;
+  const wrap = byId('documentsTableWrap');
+  if (!wrap) return;
+
+  const query = (byId('documentSearch')?.value || '').trim().toLowerCase();
+  const filter = (byId('documentFilter')?.value || 'all');
 
   const docs = [...state.documents]
     .filter(doc => doc.type === 'facture' || doc.type === 'quittance')
@@ -734,7 +792,6 @@ function renderDocuments() {
     })
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  const wrap = byId('documentsTableWrap');
   if (!docs.length) {
     wrap.innerHTML = '<div class="empty">Aucun document trouvé.</div>';
     return;
@@ -897,7 +954,7 @@ function exportData() {
 }
 
 function importData(e) {
-  const file = e.target.files[0];
+  const file = e.target.files?.[0];
   if (!file) return;
 
   const reader = new FileReader();
@@ -1065,55 +1122,6 @@ async function downloadCurrentPdf() {
     }
   }
 }
-
-window.editClient = function(id) {
-  const client = state.clients.find(c => c.id === id);
-  if (client) openClientModal(client);
-};
-
-window.deleteClient = function(id) {
-  if (!confirm('Supprimer ce client ?')) return;
-  state.clients = state.clients.filter(c => c.id !== id);
-  state.documents = state.documents.filter(d => d.clientId !== id);
-  refreshAll();
-};
-
-window.createDocForClient = function(clientId, type) {
-  if (!state.clients.length) return alert('Ajoutez d’abord un client.');
-  openDocumentModal(null, type, clientId);
-};
-
-window.editDocument = function(id) {
-  const doc = state.documents.find(d => d.id === id);
-  if (doc) openDocumentModal(doc, doc.type, doc.clientId);
-};
-
-window.deleteDocument = function(id) {
-  if (!confirm('Supprimer ce document ?')) return;
-  state.documents = state.documents.filter(d => d.id !== id);
-  refreshAll();
-};
-
-window.toggleStatus = function(id) {
-  const doc = state.documents.find(d => d.id === id);
-  if (!doc) return;
-  doc.status = doc.status === 'paid' ? 'unpaid' : 'paid';
-  refreshAll();
-};
-
-window.previewDocument = function(id) {
-  const doc = state.documents.find(d => d.id === id);
-  if (!doc) return;
-  byId('printArea').innerHTML = createDocumentHtml(doc);
-  byId('printDialog').showModal();
-};
-
-window.previewReminder = function(id, level) {
-  const doc = state.documents.find(d => d.id === id);
-  if (!doc) return;
-  byId('printArea').innerHTML = createReminderHtml(doc, level);
-  byId('printDialog').showModal();
-};
 
 function bindEvents() {
   document.querySelectorAll('.nav-btn').forEach(btn => {

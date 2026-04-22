@@ -422,7 +422,6 @@ th {
   background: white;
 }
 
-/* Base document preview */
 .doc-sheet {
   max-width: 820px;
   margin: 0 auto;
@@ -438,7 +437,6 @@ th {
   text-align: center;
 }
 
-/* Badge statut */
 .doc-status-badge {
   display: inline-flex;
   align-items: center;
@@ -464,7 +462,6 @@ th {
   background: rgba(220, 38, 38, 0.08);
 }
 
-/* Facture */
 .apple-doc {
   max-width: 900px;
   width: 100%;
@@ -566,14 +563,14 @@ th {
 }
 
 .invoice-signature-row {
-  margin-top: 18px;
+  margin-top: 8px;
   margin-bottom: 4px;
-  padding-right: 32px;
+  padding-right: 28px;
 }
 
 .invoice-stamp {
-  max-width: 280px;
-  max-height: 122px;
+  max-width: 340px;
+  max-height: 150px;
   object-fit: contain;
 }
 
@@ -586,7 +583,6 @@ th {
   font-size: 12px;
 }
 
-/* Quittance redesign */
 .receipt-doc {
   min-height: 1122px;
   display: flex;
@@ -727,14 +723,14 @@ th {
 
 .receipt-signature-row {
   justify-content: flex-end;
-  margin-top: 22px;
+  margin-top: 8px;
   margin-bottom: 4px;
-  padding-right: 24px;
+  padding-right: 20px;
 }
 
 .receipt-stamp {
-  max-width: 270px;
-  max-height: 118px;
+  max-width: 330px;
+  max-height: 145px;
   object-fit: contain;
 }
 
@@ -744,7 +740,6 @@ th {
   text-align: center;
 }
 
-/* Relances */
 .reminder-level-1 {
   border-left: 4px solid #f59e0b;
 }

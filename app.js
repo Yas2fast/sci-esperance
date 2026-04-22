@@ -64,10 +64,10 @@ function getNextMonthFifth() {
   return new Date(year, month + 1, 5).toISOString().slice(0, 10);
 }
 
-function getCurrentMonthFifth(date = new Date()) {
+function getCurrentMonthDueDate(dueDay = 5, date = new Date()) {
   const year = date.getFullYear();
   const month = date.getMonth();
-  return new Date(year, month, 5).toISOString().slice(0, 10);
+  return new Date(year, month, Number(dueDay || 5)).toISOString().slice(0, 10);
 }
 
 function getPeriodLabelFromDate(date = new Date()) {
@@ -89,6 +89,30 @@ function setFormValue(form, field, value) {
 
 function getNumeric(value) {
   return Number(value || 0);
+}
+
+function getClientMonthlyCharges(client = {}) {
+  return Number(
+    client.chargesAmount ??
+    client.monthlyCharges ??
+    0
+  );
+}
+
+function getClientDeposit(client = {}) {
+  return Number(
+    client.securityDeposit ??
+    client.depositAmount ??
+    0
+  );
+}
+
+function getClientLeaseStart(client = {}) {
+  return client.leaseStartDate || client.entryDate || '';
+}
+
+function getClientLeaseEnd(client = {}) {
+  return client.leaseEndDate || client.endDate || '';
 }
 
 function getDocumentBreakdown(doc = {}) {
@@ -130,13 +154,13 @@ function normalizeClient(client = {}) {
     phone: client.phone || '',
     property: client.property || '',
     rentAmount: Number(client.rentAmount || 0),
-    chargesAmount: Number(client.chargesAmount || 0),
+    chargesAmount: getClientMonthlyCharges(client),
     dueDay: client.dueDay ? Number(client.dueDay) : '',
     address: client.address || '',
     notes: client.notes || '',
-    leaseStartDate: client.leaseStartDate || '',
-    leaseEndDate: client.leaseEndDate || '',
-    securityDeposit: Number(client.securityDeposit || 0),
+    leaseStartDate: getClientLeaseStart(client),
+    leaseEndDate: getClientLeaseEnd(client),
+    securityDeposit: getClientDeposit(client),
     paymentMethod: client.paymentMethod || '',
     paymentFrequency: client.paymentFrequency || 'mensuel',
     tenantStatus: client.tenantStatus || 'actif',
@@ -179,9 +203,7 @@ function normalizeDocument(doc = {}) {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return structuredClone(defaultData);
-    }
+    if (!raw) return structuredClone(defaultData);
 
     const parsed = JSON.parse(raw);
 
@@ -297,10 +319,13 @@ function getDueBadgeHtml(doc) {
 
   const daysUntilDue = getDaysUntilDue(doc);
   if (daysUntilDue === 0) {
-    return `<span class="tag facture">Aujourd’hui</span>`;
+    return `<span class="tag today">Aujourd’hui</span>`;
   }
-  if (daysUntilDue !== null && daysUntilDue > 0) {
-    return `<span class="tag quittance">Dans ${daysUntilDue} j</span>`;
+  if (daysUntilDue !== null && daysUntilDue > 0 && daysUntilDue <= 7) {
+    return `<span class="tag soon">Dans ${daysUntilDue} j</span>`;
+  }
+  if (daysUntilDue !== null && daysUntilDue > 7) {
+    return `<span class="tag future">À venir</span>`;
   }
 
   return `<span class="tag facture">À venir</span>`;
@@ -309,7 +334,8 @@ function getDueBadgeHtml(doc) {
 function getClientStatusLabel(status) {
   const map = {
     actif: 'Actif',
-    sortant: 'Sortant',
+    préavis: 'Préavis',
+    sorti: 'Sorti',
     archive: 'Archivé',
   };
   return map[status] || status || 'Actif';
@@ -326,39 +352,40 @@ function populateClientOptions(selectedId = '') {
       ).join('')
     : '<option value="">Aucun client</option>';
 
-  if (selectedId) {
-    select.value = selectedId;
-  }
+  if (selectedId) select.value = selectedId;
 }function openClientModal(client = null) {
   const dialog = byId('clientDialog');
   const form = byId('clientForm');
   if (!dialog || !form) return;
 
   form.reset();
-  byId('clientModalTitle').textContent = client ? 'Modifier le client' : 'Nouveau client';
+  byId('clientModalTitle').textContent = client ? 'Modifier le locataire' : 'Nouveau locataire';
 
   const safeClient = normalizeClient(client || {});
   setFormValue(form, 'id', client?.id || '');
 
-  [
-    'name',
-    'email',
-    'phone',
-    'property',
-    'rentAmount',
-    'chargesAmount',
-    'dueDay',
-    'address',
-    'notes',
-    'leaseStartDate',
-    'leaseEndDate',
-    'securityDeposit',
-    'paymentMethod',
-    'paymentFrequency',
-    'tenantStatus',
-  ].forEach(field => {
-    setFormValue(form, field, safeClient[field]);
-  });
+  setFormValue(form, 'name', safeClient.name);
+  setFormValue(form, 'email', safeClient.email);
+  setFormValue(form, 'phone', safeClient.phone);
+  setFormValue(form, 'property', safeClient.property);
+  setFormValue(form, 'rentAmount', safeClient.rentAmount);
+  setFormValue(form, 'chargesAmount', safeClient.chargesAmount);
+  setFormValue(form, 'monthlyCharges', safeClient.chargesAmount);
+  setFormValue(form, 'dueDay', safeClient.dueDay);
+  setFormValue(form, 'address', safeClient.address);
+  setFormValue(form, 'notes', safeClient.notes);
+  setFormValue(form, 'leaseStartDate', safeClient.leaseStartDate);
+  setFormValue(form, 'entryDate', safeClient.leaseStartDate);
+  setFormValue(form, 'leaseEndDate', safeClient.leaseEndDate);
+  setFormValue(form, 'endDate', safeClient.leaseEndDate);
+  setFormValue(form, 'securityDeposit', safeClient.securityDeposit);
+  setFormValue(form, 'depositAmount', safeClient.securityDeposit);
+  setFormValue(form, 'paymentMethod', safeClient.paymentMethod);
+  setFormValue(form, 'paymentFrequency', safeClient.paymentFrequency);
+  setFormValue(form, 'tenantStatus', safeClient.tenantStatus);
+  setFormValue(form, 'guarantorName', safeClient.guarantorName);
+  setFormValue(form, 'guarantorPhone', safeClient.guarantorPhone);
+  setFormValue(form, 'guarantorEmail', safeClient.guarantorEmail);
 
   dialog.showModal();
 }
@@ -388,6 +415,7 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   setFormValue(form, 'electricity', normalizedDoc.electricity || 0);
   setFormValue(form, 'water', normalizedDoc.water || 0);
   setFormValue(form, 'charges', normalizedDoc.charges || 0);
+  setFormValue(form, 'amount', normalizedDoc.amount || '');
   setFormValue(form, 'vatRate', normalizedDoc.vatRate ?? 0);
   setFormValue(form, 'status', normalizedDoc.status || (type === 'quittance' ? 'paid' : 'unpaid'));
   setFormValue(form, 'notes', normalizedDoc.notes || '');
@@ -404,16 +432,7 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
 
 function createInvoiceHtml(doc, client, s) {
   const breakdown = getDocumentBreakdown(doc);
-  const {
-    rent,
-    electricity,
-    water,
-    charges,
-    subtotal,
-    vatRate,
-    vatAmount,
-    totalTtc,
-  } = breakdown;
+  const { rent, electricity, water, charges, subtotal, vatRate, vatAmount, totalTtc } = breakdown;
 
   return `
     <div class="doc-sheet apple-doc invoice-doc">
@@ -481,7 +500,7 @@ function createInvoiceHtml(doc, client, s) {
         <p><strong>Conditions de paiement :</strong></p>
         <p>Mode de paiement : Chèque ou virement</p>
         <p>Conditions d’escompte : Aucun escompte en cas de paiement anticipé.</p>
-        <p>Indemnité forfaitaire pour retard de paiement (Décret n° 2012-1115 du 2 octobre 2012) : 40 €</p>
+        <p>Indemnité forfaitaire pour retard de paiement : 40 €</p>
       </div>
 
       ${doc.notes ? `<div class="apple-doc-conditions"><p><strong>Notes :</strong> ${escapeHtml(doc.notes)}</p></div>` : ''}
@@ -500,13 +519,7 @@ function createInvoiceHtml(doc, client, s) {
 
 function createReceiptHtml(doc, client, s) {
   const breakdown = getDocumentBreakdown(doc);
-  const {
-    rent,
-    electricity,
-    water,
-    charges,
-    totalTtc,
-  } = breakdown;
+  const { rent, electricity, water, charges, totalTtc } = breakdown;
 
   return `
     <div class="doc-sheet apple-doc receipt-doc">
@@ -689,7 +702,44 @@ window.toggleMenu = function(id, event) {
   if (!alreadyOpen) {
     menu.classList.add('active');
   }
-};window.editClient = function(id) {
+};
+
+function findReceiptForInvoice(invoiceDoc) {
+  return state.documents.find(d =>
+    d.type === 'quittance' &&
+    d.clientId === invoiceDoc.clientId &&
+    d.period === invoiceDoc.period
+  );
+}
+
+function createReceiptFromInvoice(invoiceDoc) {
+  const existing = findReceiptForInvoice(invoiceDoc);
+
+  const receiptPayload = normalizeDocument({
+    type: 'quittance',
+    clientId: invoiceDoc.clientId,
+    number: existing?.number || nextDocumentNumber('quittance'),
+    date: getTodayIso(),
+    dueDate: invoiceDoc.dueDate,
+    period: invoiceDoc.period,
+    rent: invoiceDoc.rent,
+    electricity: invoiceDoc.electricity,
+    water: invoiceDoc.water,
+    charges: invoiceDoc.charges,
+    vatRate: invoiceDoc.vatRate,
+    status: 'paid',
+    notes: invoiceDoc.notes || '',
+  });
+
+  if (existing) {
+    Object.assign(existing, { ...receiptPayload, id: existing.id });
+  } else {
+    state.documents.push({
+      ...receiptPayload,
+      id: uid('doc'),
+    });
+  }
+}window.editClient = function(id) {
   const client = state.clients.find(c => c.id === id);
   if (client) openClientModal(client);
 };
@@ -720,7 +770,20 @@ window.deleteDocument = function(id) {
 window.toggleStatus = function(id) {
   const doc = state.documents.find(d => d.id === id);
   if (!doc) return;
-  doc.status = doc.status === 'paid' ? 'unpaid' : 'paid';
+
+  const wasPaid = doc.status === 'paid';
+  doc.status = wasPaid ? 'unpaid' : 'paid';
+
+  if (doc.type === 'facture' && doc.status === 'paid') {
+    createReceiptFromInvoice(doc);
+  }
+
+  if (doc.type === 'facture' && doc.status === 'unpaid') {
+    state.documents = state.documents.filter(d =>
+      !(d.type === 'quittance' && d.clientId === doc.clientId && d.period === doc.period)
+    );
+  }
+
   refreshAll();
 };
 
@@ -858,7 +921,7 @@ function renderEncaissements() {
           const daysUntilDue = getDaysUntilDue(doc);
           const dueInfo = overdueDays > 0
             ? `${overdueDays} jour(s) de retard`
-            : (daysUntilDue === 0 ? 'Échéance aujourd’hui' : `Échéance dans ${daysUntilDue} jour(s)}`);
+            : (daysUntilDue === 0 ? 'Échéance aujourd’hui' : `Échéance dans ${daysUntilDue} jour(s)`);
 
           return `
             <tr>
@@ -1191,20 +1254,11 @@ function runMonthlyGenerationIfNeeded() {
     const chargesAmount = Number(client.chargesAmount || 0);
     if (rentAmount <= 0) return;
 
-    const dueDay = Number(client.dueDay || 5);
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const dueDate = new Date(year, month, dueDay).toISOString().slice(0, 10);
+    const dueDate = getCurrentMonthDueDate(client.dueDay || 5, now);
 
     const alreadyHasInvoice = state.documents.some(doc =>
       doc.clientId === client.id &&
       doc.type === 'facture' &&
-      doc.period === period
-    );
-
-    const alreadyHasReceipt = state.documents.some(doc =>
-      doc.clientId === client.id &&
-      doc.type === 'quittance' &&
       doc.period === period
     );
 
@@ -1223,25 +1277,6 @@ function runMonthlyGenerationIfNeeded() {
         charges: chargesAmount,
         vatRate: 0,
         status: 'unpaid',
-        notes: '',
-      }));
-    }
-
-    if (!alreadyHasReceipt) {
-      state.documents.push(normalizeDocument({
-        id: uid('doc'),
-        type: 'quittance',
-        clientId: client.id,
-        number: nextDocumentNumber('quittance'),
-        date: docDate,
-        dueDate,
-        period,
-        rent: rentAmount,
-        electricity: 0,
-        water: 0,
-        charges: chargesAmount,
-        vatRate: 0,
-        status: 'paid',
         notes: '',
       }));
     }
@@ -1273,7 +1308,6 @@ async function downloadCurrentPdf() {
     }
 
     const { jsPDF } = window.jspdf;
-
     const canvas = await html2canvas(printArea, {
       scale: 2,
       useCORS: true,
@@ -1398,13 +1432,13 @@ function bindEvents() {
       phone: String(item.phone || '').trim(),
       property: String(item.property || '').trim(),
       rentAmount: item.rentAmount ? Number(item.rentAmount) : 0,
-      chargesAmount: item.chargesAmount ? Number(item.chargesAmount) : 0,
+      chargesAmount: item.chargesAmount ? Number(item.chargesAmount) : Number(item.monthlyCharges || 0),
       dueDay: item.dueDay ? Number(item.dueDay) : '',
       address: String(item.address || '').trim(),
       notes: String(item.notes || '').trim(),
-      leaseStartDate: String(item.leaseStartDate || '').trim(),
-      leaseEndDate: String(item.leaseEndDate || '').trim(),
-      securityDeposit: item.securityDeposit ? Number(item.securityDeposit) : 0,
+      leaseStartDate: String(item.leaseStartDate || item.entryDate || '').trim(),
+      leaseEndDate: String(item.leaseEndDate || item.endDate || '').trim(),
+      securityDeposit: item.securityDeposit ? Number(item.securityDeposit) : Number(item.depositAmount || 0),
       paymentMethod: String(item.paymentMethod || '').trim(),
       paymentFrequency: String(item.paymentFrequency || 'mensuel').trim(),
       tenantStatus: String(item.tenantStatus || 'actif').trim(),
@@ -1440,6 +1474,7 @@ function bindEvents() {
       electricity: Number(item.electricity || 0),
       water: Number(item.water || 0),
       charges: Number(item.charges || 0),
+      amount: Number(item.amount || 0),
       vatRate: Number(item.vatRate || 0),
       status: item.status,
       notes: String(item.notes || '').trim(),

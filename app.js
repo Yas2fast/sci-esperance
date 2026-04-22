@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'sci_esperance_manager_v1';
+const AUTO_MONTHLY_KEY = 'sci_esperance_auto_monthly_generation_v1';
 
 const defaultData = {
   settings: {
@@ -77,6 +78,24 @@ function getNextMonthFifth() {
   const month = today.getMonth();
   const nextMonthDate = new Date(year, month + 1, 5);
   return nextMonthDate.toISOString().slice(0, 10);
+}
+
+function getCurrentMonthFifth(date = new Date()) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const currentMonthDate = new Date(year, month, 5);
+  return currentMonthDate.toISOString().slice(0, 10);
+}
+
+function getPeriodLabelFromDate(date = new Date()) {
+  return `Loyer ${new Intl.DateTimeFormat('fr-FR', {
+    month: 'long',
+    year: 'numeric',
+  }).format(date)}`;
+}
+
+function getMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function setView(view) {
@@ -260,7 +279,7 @@ function renderReminders() {
   if (!wrap) return;
 
   const query = (byId('reminderSearch')?.value || '').trim().toLowerCase();
-  const filter = (byId('reminderFilter')?.value || 'all');
+  const filter = byId('reminderFilter')?.value || 'all';
 
   const docs = [...state.documents]
     .filter(doc => doc.type === 'facture' && doc.status === 'unpaid')
@@ -302,7 +321,7 @@ function renderReminders() {
           const level = getReminderLevel(doc);
           const overdueDays = getOverdueDays(doc);
           const levelLabel = level === 1 ? '1ère relance' : level === 2 ? '2ème relance' : 'Mise en demeure';
-          const tagClass = level === 1 ? 'relance' : 'mise-en-demeure';
+          const tagClass = level === 1 ? 'relance' : level === 2 ? 'relance' : 'mise-en-demeure';
 
           return `
             <tr class="reminder-level-${level}">
@@ -398,7 +417,7 @@ function openDocumentModal(doc = null, presetType = 'facture', presetClientId = 
   if (!doc && presetClientId) {
     const client = state.clients.find(c => c.id === presetClientId);
     if (client?.rentAmount) form.elements.amount.value = client.rentAmount;
-    form.elements.period.value = `Loyer ${new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date())}`;
+    form.elements.period.value = getPeriodLabelFromDate(new Date());
   }
 
   dialog.showModal();
@@ -891,8 +910,8 @@ function bindEvents() {
     if (index >= 0) state.clients[index] = payload;
     else state.clients.push(payload);
 
-    byId('clientDialog').close();
     refreshAll();
+    byId('clientDialog').close();
   });
 
   byId('documentForm').addEventListener('submit', e => {
@@ -921,8 +940,8 @@ function bindEvents() {
     if (index >= 0) state.documents[index] = payload;
     else state.documents.push(payload);
 
-    byId('documentDialog').close();
     refreshAll();
+    byId('documentDialog').close();
   });
 
   byId('settingsForm').addEventListener('submit', e => {
@@ -975,5 +994,72 @@ function importData(e) {
   reader.readAsText(file);
 }
 
+function runMonthlyGenerationIfNeeded() {
+  const now = new Date();
+  const monthKey = getMonthKey(now);
+  const lastGenerated = localStorage.getItem(AUTO_MONTHLY_KEY);
+
+  if (lastGenerated === monthKey) return;
+
+  const period = getPeriodLabelFromDate(now);
+  const docDate = now.toISOString().slice(0, 10);
+  const dueDate = getCurrentMonthFifth(now);
+
+  state.clients.forEach(client => {
+    const rentAmount = Number(client.rentAmount || 0);
+    if (rentAmount <= 0) return;
+
+    const alreadyHasInvoice = state.documents.some(doc =>
+      doc.clientId === client.id &&
+      doc.type === 'facture' &&
+      doc.period === period
+    );
+
+    const alreadyHasReceipt = state.documents.some(doc =>
+      doc.clientId === client.id &&
+      doc.type === 'quittance' &&
+      doc.period === period
+    );
+
+    if (!alreadyHasInvoice) {
+      state.documents.push({
+        id: uid('doc'),
+        type: 'facture',
+        clientId: client.id,
+        number: nextDocumentNumber('facture'),
+        date: docDate,
+        dueDate,
+        period,
+        amount: rentAmount,
+        charges: 0,
+        vatRate: 0,
+        status: 'unpaid',
+        notes: '',
+      });
+    }
+
+    if (!alreadyHasReceipt) {
+      state.documents.push({
+        id: uid('doc'),
+        type: 'quittance',
+        clientId: client.id,
+        number: nextDocumentNumber('quittance'),
+        date: docDate,
+        dueDate,
+        period,
+        amount: rentAmount,
+        charges: 0,
+        vatRate: 0,
+        status: 'paid',
+        notes: '',
+      });
+    }
+  });
+
+  localStorage.setItem(AUTO_MONTHLY_KEY, monthKey);
+  saveState();
+}
+
 bindEvents();
+runMonthlyGenerationIfNeeded();
 refreshAll();

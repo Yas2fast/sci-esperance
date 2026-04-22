@@ -243,9 +243,7 @@ textarea {
 
 .full {
   width: 100%;
-}
-
-.toolbar {
+}.toolbar {
   display: flex;
   gap: 12px;
   margin-bottom: 14px;
@@ -569,9 +567,7 @@ th {
   color: #dc2626;
   border-color: #dc2626;
   background: rgba(220, 38, 38, 0.08);
-}
-
-/* Facture */
+}/* Facture */
 .apple-doc {
   max-width: 900px;
   width: 100%;

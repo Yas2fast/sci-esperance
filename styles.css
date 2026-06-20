@@ -931,4 +931,29 @@ th {
   .receipt-doc {
     max-width: none;
   }
+@media (max-width: 768px) {
+  .app-shell { display: flex !important; flex-direction: column !important; }
+  .sidebar, .main { width: 100% !important; }
+
+  .nav { display: flex !important; flex-direction: row !important; overflow-x: auto !important; gap: 6px; }
+  .nav-btn { white-space: nowrap; }
+
+  .topbar { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 10px; }
+
+  .stats-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; }
+  .panel-grid, .form-grid, .shortcut-grid { display: grid !important; grid-template-columns: 1fr !important; }
+
+  .toolbar-double { display: flex !important; flex-direction: column !important; }
+  .toolbar-double > * { width: 100% !important; }
+
+  .action-row { display: flex !important; flex-wrap: wrap !important; gap: 8px; }
+  .action-row > button { flex: 1 1 auto !important; }
+
+  .table-wrap { overflow-x: auto !important; }
+
+  .modal-card { width: 92vw !important; max-width: 92vw !important; }
+}
+
+@media (max-width: 420px) {
+  .stats-grid { grid-template-columns: 1fr !important; }
 }
